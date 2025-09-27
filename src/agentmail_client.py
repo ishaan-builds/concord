@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Inbox:
-    """Represents an AgentMail inbox."""
+    """Represents an AgentMail inbox"""
     id: str
     display_name: str
     email_address: str
