@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block title %}AgentMail Trip Creator - Home{% endblock %}
+
+{% block content %}
+<div class="hero-section">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-lg-6">
+                <h1 class="display-4 fw-bold mb-4">Create AI Trip Assistants</h1>
+                <p class="lead mb-4">
+                    Generate smart email inboxes that automatically help coordinate group trips. 
+                    Get instant responses about itineraries, budgets, locations, and more!
+                </p>
+                <a href="{{ url_for('create_form') }}" class="btn btn-primary btn-lg">
+                    <i class="fas fa-plus me-2"></i>Create New Trip
+                </a>
+            </div>
+            <div class="col-lg-6 text-center">
+                <i class="fas fa-robot" style="font-size: 8rem; opacity: 0.8;"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container my-5">
+    <!-- Features Section -->
+    <div class="row mb-5">
+        <div class="col-12 text-center mb-4">
+            <h2>How It Works</h2>
+            <p class="text-muted">Three simple steps to get your AI trip assistant running</p>
+        </div>
+        <div class="col-md-4 text-center">
+            <i class="fas fa-wpforms feature-icon"></i>
+            <h4>1. Fill Out Trip Details</h4>
+            <p class="text-muted">Enter your trip information, dates, budget, and participants</p>
+        </div>
+        <div class="col-md-4 text-center">
+            <i class="fas fa-envelope-open feature-icon"></i>
+            <h4>2. Get Your Email Address</h4>
+            <p class="text-muted">Receive a unique AgentMail inbox for your trip coordination</p>
+        </div>
+        <div class="col-md-4 text-center">
+            <i class="fas fa-comments feature-icon"></i>
+            <h4>3. Start Chatting</h4>
+            <p class="text-muted">Share the email with your group and let the AI handle questions</p>
+        </div>
+    </div>
+
+    <!-- Existing Trips Section -->
+    {% if trips %}
+    <div class="row">
+        <div class="col-12">
+            <h2 class="mb-4">
+                <i class="fas fa-suitcase-rolling me-2"></i>
+                Your Trips ({{ trips|length }})
+            </h2>
+        </div>
+    </div>
+    
+    <div class="row">
+        {% for trip_id, trip in trips.items() %}
+        <div class="col-lg-6 col-xl-4">
+            <div class="card trip-card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">{{ trip.name }}</h5>
+                    <span class="badge bg-success status-badge">Active</span>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-2">
+                        <i class="fas fa-map-marker-alt me-1"></i>{{ trip.destination or 'No destination set' }}
+                    </p>
+                    <p class="text-muted mb-2">
+                        <i class="fas fa-calendar me-1"></i>{{ trip.start_date }} to {{ trip.end_date }}
+                    </p>
+                    <p class="text-muted mb-2">
+                        <i class="fas fa-users me-1"></i>{{ (trip.participants|length) + 1 }} participants
+                    </p>
+                    {% if trip.budget_total > 0 %}
+                    <p class="text-muted mb-3">
+                        <i class="fas fa-dollar-sign me-1"></i>${{ "%.2f"|format(trip.budget_total) }} total
+                    </p>
+                    {% endif %}
+                    
+                    <div class="mb-3">
+                        <small class="text-muted">Email Address:</small>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control" value="{{ trip.inbox_email }}" readonly>
+                            <button class="btn btn-outline-secondary" onclick="copyToClipboard('{{ trip.inbox_email }}')">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <div class="btn-group w-100" role="group">
+                        <a href="{{ url_for('trip_detail', trip_id=trip_id) }}" class="btn btn-primary btn-sm">
+                            <i class="fas fa-eye me-1"></i>View
+                        </a>
+                        <button class="btn btn-outline-danger btn-sm" onclick="deleteTrip('{{ trip_id }}', '{{ trip.name }}')">
+                            <i class="fas fa-trash me-1"></i>Delete
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="row">
+        <div class="col-12 text-center">
+            <div class="card border-0 bg-light">
+                <div class="card-body py-5">
+                    <i class="fas fa-suitcase" style="font-size: 4rem; color: #ccc; margin-bottom: 2rem;"></i>
+                    <h3>No Trips Yet</h3>
+                    <p class="text-muted mb-4">Create your first AI-powered trip coordinator to get started!</p>
+                    <a href="{{ url_for('create_form') }}" class="btn btn-primary">
+                        <i class="fas fa-plus me-2"></i>Create Your First Trip
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Delete confirmation modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete the trip "<span id="deleteTripName"></span>"?</p>
+                <p class="text-muted">This will remove the trip, its inbox, and all associated data. This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="deleteForm" method="POST" style="display: inline;">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash me-1"></i>Delete Trip
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(function() {
+        // Show toast or alert
+        const toast = document.createElement('div');
+        toast.className = 'alert alert-success position-fixed';
+        toast.style.top = '20px';
+        toast.style.right = '20px';
+        toast.style.zIndex = '9999';
+        toast.innerHTML = '<i class="fas fa-check me-2"></i>Email address copied!';
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+            document.body.removeChild(toast);
+        }, 2000);
+    });
+}
+
+function deleteTrip(tripId, tripName) {
+    document.getElementById('deleteTripName').textContent = tripName;
+    document.getElementById('deleteForm').action = `/trip/${tripId}/delete`;
+    new bootstrap.Modal(document.getElementById('deleteModal')).show();
+}
+</script>
+{% endblock %}

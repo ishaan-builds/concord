@@ -83,6 +83,11 @@ class AgentMailClient:
                 raise ValueError(f"Unsupported HTTP method: {method}")
                 
             response.raise_for_status()
+            
+            # Handle empty responses (common with DELETE requests)
+            if not response.text.strip():
+                return None
+            
             return response.json()
             
         except requests.exceptions.RequestException as e:
@@ -204,6 +209,42 @@ class AgentMailClient:
         # The chatbot works fine without message history
         return []
     
+    def _convert_text_to_html(self, text: str) -> str:
+        """
+        Convert plain text to HTML with proper formatting.
+        
+        Args:
+            text: Plain text message
+            
+        Returns:
+            HTML formatted message
+        """
+        import re
+        
+        # Handle different types of newlines and escape sequences
+        html = text
+        
+        # Replace various newline representations
+        html = html.replace('\\n', '\n')  # Convert literal \n to actual newlines
+        html = html.replace('\r\n', '\n')  # Normalize Windows line endings
+        
+        # Split into paragraphs (double newlines)
+        paragraphs = html.split('\n\n')
+        formatted_paragraphs = []
+        
+        for paragraph in paragraphs:
+            if paragraph.strip():
+                # Convert single newlines within paragraphs to <br>
+                paragraph_html = paragraph.replace('\n', '<br>')
+                
+                # Handle markdown-style bold text
+                paragraph_html = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', paragraph_html)
+                
+                # Wrap in paragraph tags
+                formatted_paragraphs.append(f'<p>{paragraph_html}</p>')
+        
+        return ''.join(formatted_paragraphs)
+    
     def send_message(self, inbox_id: str, to: str, subject: str, body: str, 
                     message_id: Optional[str] = None) -> Message:
         """
@@ -221,19 +262,21 @@ class AgentMailClient:
         """
         if message_id:
             # Use the reply endpoint as documented: /inboxes/{inbox_id}/messages/reply
+            html_body = self._convert_text_to_html(body)
             data = {
                 "message_id": message_id,
                 "text": body,
-                "html": f"<p>{body.replace('\n', '<br>')}</p>"  # Simple HTML conversion
+                "html": html_body
             }
             response = self._make_request("POST", f"/inboxes/{inbox_id}/messages/reply", data)
         else:
             # Use the send endpoint for new messages: /inboxes/{inbox_id}/messages/send
+            html_body = self._convert_text_to_html(body)
             data = {
                 "to": [to],
                 "subject": subject,
                 "text": body,
-                "html": f"<p>{body.replace('\n', '<br>')}</p>"  # Simple HTML conversion
+                "html": html_body
             }
             response = self._make_request("POST", f"/inboxes/{inbox_id}/messages/send", data)
             
@@ -307,7 +350,7 @@ class AgentMailClient:
             True if successful
         """
         try:
-            self._make_request("DELETE", f"/webhooks/{webhook_id}")
+            result = self._make_request("DELETE", f"/webhooks/{webhook_id}")
             return True
         except requests.exceptions.HTTPError:
             return False

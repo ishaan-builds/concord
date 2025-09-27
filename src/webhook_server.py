@@ -8,10 +8,12 @@ import json
 from typing import Dict, Any, Optional
 from datetime import datetime
 import asyncio
+import chromadb
 
 from .agentmail_client import AgentMailClient
 from .chatbot_engine import ChatbotEngine
 from .itinerary_models import TripItinerary
+from .email_vectorizer import store_msg
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -52,6 +54,8 @@ class WebhookServer:
         self.agentmail_client = agentmail_client
         self.chatbot_engine = chatbot_engine
         self.default_itinerary_id = default_itinerary_id
+        self.chroma_client = chromadb.PersistentClient(path='./db/')
+        self.collection = self.chroma_client.get_or_create_collection(name='emails')
         
         # Store processing status to avoid duplicate processing
         self.processed_messages = set()
@@ -139,6 +143,74 @@ class WebhookServer:
                 import traceback
                 traceback.print_exc()
                 raise HTTPException(status_code=500, detail=str(e))
+        
+        @self.app.post("/webhook/{trip_id}")
+        async def handle_trip_webhook(trip_id: str, request: Request, background_tasks: BackgroundTasks):
+            """
+            Handle incoming webhook events for a specific trip.
+            
+            Args:
+                trip_id: ID of the trip
+                request: Raw request object to handle any payload format
+                background_tasks: FastAPI background tasks
+                
+            Returns:
+                Acknowledgment response
+            """
+            try:
+                logger.info(f"Received webhook for trip: {trip_id}")
+                
+                # Get raw payload and log it for debugging
+                raw_body = await request.body()
+                logger.info(f"Raw webhook payload for trip {trip_id}: {raw_body}")
+                
+                # Try to parse JSON
+                try:
+                    payload_data = json.loads(raw_body.decode('utf-8'))
+                    logger.info(f"Parsed webhook JSON for trip {trip_id}: {json.dumps(payload_data, indent=2)}")
+                except json.JSONDecodeError as je:
+                    logger.error(f"Failed to parse JSON payload for trip {trip_id}: {je}")
+                    return {"status": "error", "message": "Invalid JSON payload"}
+                
+                # Extract event type
+                event_type = payload_data.get("event_type")
+                
+                if not event_type:
+                    # Maybe the payload IS the message data directly
+                    if "sender" in payload_data or "from" in payload_data:
+                        logger.info(f"Treating payload as direct message data for trip {trip_id}")
+                        background_tasks.add_task(
+                            self._process_trip_message,
+                            trip_id,
+                            payload_data
+                        )
+                        return {"status": "accepted", "message": "Direct message queued for processing"}
+                
+                logger.info(f"Received webhook event for trip {trip_id}: {event_type}")
+                
+                if event_type == "message.received":
+                    # Extract message data from AgentMail webhook format
+                    message_data = payload_data.get("message", payload_data.get("data", payload_data))
+                    background_tasks.add_task(
+                        self._process_trip_message,
+                        trip_id,
+                        message_data
+                    )
+                    return {"status": "accepted", "message": f"Message queued for processing for trip {trip_id}"}
+                
+                elif event_type == "message.sent":
+                    logger.info(f"Message sent confirmation for trip {trip_id}: {payload_data.get('data', {}).get('id')}")
+                    return {"status": "acknowledged"}
+                
+                else:
+                    logger.warning(f"Unhandled event type for trip {trip_id}: {event_type}")
+                    return {"status": "ignored", "reason": "Unhandled event type"}
+                    
+            except Exception as e:
+                logger.error(f"Error processing webhook for trip {trip_id}: {e}")
+                import traceback
+                traceback.print_exc()
+                raise HTTPException(status_code=500, detail=str(e))
     
     async def _process_incoming_message(self, message_data: Dict[str, Any]):
         """
@@ -169,6 +241,8 @@ class WebhookServer:
             subject = message_data.get("subject") or "No Subject"
             body = message_data.get("text") or message_data.get("body") or message_data.get("content")
             inbox_id = message_data.get("inbox_id")
+            labels = message_data.get("labels")
+            
             
             # Ensure we have a valid message_id
             if not message_id:
@@ -249,6 +323,118 @@ class WebhookServer:
                     )
             except Exception as send_error:
                 logger.error(f"Failed to send error response: {send_error}")
+    
+    async def _process_trip_message(self, trip_id: str, message_data: Dict[str, Any]):
+        """
+        Process an incoming message for a specific trip.
+        
+        Args:
+            trip_id: ID of the trip
+            message_data: Message data from webhook payload
+        """
+        try:
+            import os
+            import json
+            
+            # Load trip data
+            trips_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'trips.json')
+            if not os.path.exists(trips_file):
+                logger.error(f"Trips file not found: {trips_file}")
+                return
+                
+            with open(trips_file, 'r') as f:
+                trips_data = json.load(f)
+            
+            if trip_id not in trips_data:
+                logger.error(f"Trip {trip_id} not found in trips data")
+                return
+                
+            trip_data = trips_data[trip_id]
+            itinerary_file = trip_data.get('itinerary_file')
+            
+            if not itinerary_file or not os.path.exists(itinerary_file):
+                logger.error(f"Itinerary file not found for trip {trip_id}: {itinerary_file}")
+                return
+            
+            # Load trip-specific itinerary
+            with open(itinerary_file, 'r') as f:
+                itinerary_data = f.read()
+            
+            from .itinerary_models import TripItinerary
+            trip_itinerary = TripItinerary.from_json(itinerary_data)
+            
+            # Create a new chatbot engine instance for this trip
+            from .chatbot_engine import ChatbotEngine
+            from .config import get_settings
+            
+            settings = get_settings()
+            trip_chatbot_engine = ChatbotEngine(
+                ai_provider=settings.ai.provider,
+                openai_api_key=settings.ai.openai_api_key,
+                google_api_key=settings.ai.google_api_key,
+                model=settings.ai.google_model if settings.ai.provider == 'google' else settings.ai.openai_model,
+                max_tokens=settings.ai.max_tokens,
+                temperature=settings.ai.temperature
+            )
+            trip_chatbot_engine.set_itinerary(trip_itinerary)
+            
+            logger.info(f"Loaded itinerary for trip {trip_id}: {trip_itinerary.title}")
+            
+            # Extract message information from AgentMail format
+            message_id = message_data.get("message_id") or message_data.get("id")
+            thread_id = message_data.get("thread_id")
+            sender = message_data.get("from") or message_data.get("from_") or message_data.get("sender")
+            
+            # Extract email from "Name <email>" format
+            if sender and "<" in sender and ">" in sender:
+                sender = sender.split("<")[1].split(">")[0]
+            
+            if not sender:
+                logger.error(f"No sender found in message data for trip {trip_id}: {message_data}")
+                return
+            
+            recipient = message_data.get("to")
+            subject = message_data.get("subject", "")
+            body = message_data.get("body") or message_data.get("text", "")
+            inbox_id = message_data.get("inbox_id") or trip_data['inbox_id']
+            
+            logger.info(f"Processing message for trip {trip_id} from {sender}: {subject}")
+            
+            # Skip if this is a bot message (avoid loops)
+            if self._is_bot_message(sender, recipient):
+                logger.info(f"Skipping bot's own message for trip {trip_id}")
+                return
+            
+            # Generate AI response using trip-specific chatbot
+            ai_response = trip_chatbot_engine.generate_response(
+                query=body,
+                itinerary_id=trip_id,
+                message_history=[],
+                sender_email=sender
+            )
+            
+            # Format response with suggestions
+            formatted_response = trip_chatbot_engine.format_response_with_suggestions(
+                ai_response, body
+            )
+            
+            # Send response
+            response_subject = self._generate_response_subject(subject)
+            
+            sent_message = self.agentmail_client.send_message(
+                inbox_id=inbox_id,
+                to=sender,
+                subject=response_subject,
+                body=formatted_response,
+                message_id=None  # Send as new message
+            )
+            
+            logger.info(f"Sent response message {sent_message.id} to {sender} for trip {trip_id}")
+            
+        except Exception as e:
+            logger.error(f"Error processing message for trip {trip_id}: {e}")
+            import traceback
+            traceback.print_exc()
     
     def _is_bot_message(self, sender: str, recipient: str) -> bool:
         """

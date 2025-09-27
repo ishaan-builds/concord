@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+
+{% block title %}Create New Trip - AgentMail Trip Creator{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="mb-0">
+                        <i class="fas fa-plus-circle me-2"></i>
+                        Create New Trip Assistant
+                    </h2>
+                    <p class="text-muted mb-0">Fill out the details below to generate your AI-powered trip coordination inbox</p>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('create_trip') }}">
+                        <!-- Basic Trip Information -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h5 class="text-primary mb-3">
+                                    <i class="fas fa-info-circle me-2"></i>Basic Information
+                                </h5>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="trip_name" class="form-label">Trip Name *</label>
+                                <input type="text" class="form-control" id="trip_name" name="trip_name" 
+                                       placeholder="e.g., San Francisco Weekend Getaway" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="destination" class="form-label">Destination</label>
+                                <input type="text" class="form-control" id="destination" name="destination" 
+                                       placeholder="e.g., San Francisco, CA">
+                            </div>
+                            <div class="col-12 mt-3">
+                                <label for="trip_description" class="form-label">Trip Description</label>
+                                <textarea class="form-control" id="trip_description" name="trip_description" 
+                                          rows="3" placeholder="Brief description of your trip..."></textarea>
+                            </div>
+                        </div>
+
+                        <!-- Dates -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h5 class="text-primary mb-3">
+                                    <i class="fas fa-calendar me-2"></i>Dates
+                                </h5>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="start_date" class="form-label">Start Date *</label>
+                                <input type="date" class="form-control" id="start_date" name="start_date" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="end_date" class="form-label">End Date *</label>
+                                <input type="date" class="form-control" id="end_date" name="end_date" required>
+                            </div>
+                        </div>
+
+                        <!-- Organizer Information -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h5 class="text-primary mb-3">
+                                    <i class="fas fa-user-tie me-2"></i>Trip Organizer
+                                </h5>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="organizer_name" class="form-label">Your Name *</label>
+                                <input type="text" class="form-control" id="organizer_name" name="organizer_name" 
+                                       placeholder="John Doe" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="organizer_email" class="form-label">Your Email *</label>
+                                <input type="email" class="form-control" id="organizer_email" name="organizer_email" 
+                                       placeholder="john@example.com" required>
+                            </div>
+                        </div>
+
+                        <!-- Participants -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h5 class="text-primary mb-3">
+                                    <i class="fas fa-users me-2"></i>Participants
+                                </h5>
+                                <label for="participants" class="form-label">Other Participants</label>
+                                <textarea class="form-control" id="participants" name="participants" 
+                                          rows="3" placeholder="Enter names separated by commas (e.g., Alice Smith, Bob Johnson, Carol Davis)"></textarea>
+                                <div class="form-text">
+                                    List the names of other people joining the trip. You can leave this empty and add people later.
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Budget -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h5 class="text-primary mb-3">
+                                    <i class="fas fa-dollar-sign me-2"></i>Budget (Optional)
+                                </h5>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="budget_total" class="form-label">Total Budget</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">$</span>
+                                    <input type="number" class="form-control" id="budget_total" name="budget_total" 
+                                           placeholder="2000.00" step="0.01" min="0">
+                                </div>
+                                <div class="form-text">Leave empty if no budget is set</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Per Person (Calculated)</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">$</span>
+                                    <input type="text" class="form-control" id="budget_per_person" 
+                                           placeholder="0.00" readonly>
+                                </div>
+                                <div class="form-text">Auto-calculated based on total budget and participants</div>
+                            </div>
+                        </div>
+
+                        <!-- Submit Button -->
+                        <div class="row">
+                            <div class="col-12">
+                                <hr>
+                                <div class="d-flex justify-content-between">
+                                    <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                                        <i class="fas fa-arrow-left me-2"></i>Cancel
+                                    </a>
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fas fa-magic me-2"></i>Create Trip Assistant
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Preview Card -->
+            <div class="card mt-4 bg-light">
+                <div class="card-body">
+                    <h6 class="text-primary mb-3">
+                        <i class="fas fa-lightbulb me-2"></i>What happens next?
+                    </h6>
+                    <ul class="list-unstyled mb-0">
+                        <li class="mb-2">
+                            <i class="fas fa-check text-success me-2"></i>
+                            We'll create a unique AgentMail inbox for your trip
+                        </li>
+                        <li class="mb-2">
+                            <i class="fas fa-check text-success me-2"></i>
+                            An AI chatbot will be configured with your trip details
+                        </li>
+                        <li class="mb-2">
+                            <i class="fas fa-check text-success me-2"></i>
+                            You'll get an email address to share with your group
+                        </li>
+                        <li class="mb-0">
+                            <i class="fas fa-check text-success me-2"></i>
+                            The AI will automatically answer questions about your trip!
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Auto-calculate per person budget
+function calculatePerPerson() {
+    const totalBudget = parseFloat(document.getElementById('budget_total').value) || 0;
+    const participantsText = document.getElementById('participants').value.trim();
+    const participantCount = participantsText ? participantsText.split(',').filter(p => p.trim()).length : 0;
+    const totalPeople = participantCount + 1; // +1 for organizer
+    
+    const perPerson = totalPeople > 0 && totalBudget > 0 ? (totalBudget / totalPeople) : 0;
+    document.getElementById('budget_per_person').value = perPerson.toFixed(2);
+}
+
+// Set minimum date to today
+document.getElementById('start_date').min = new Date().toISOString().split('T')[0];
+document.getElementById('end_date').min = new Date().toISOString().split('T')[0];
+
+// Update end date minimum when start date changes
+document.getElementById('start_date').addEventListener('change', function() {
+    document.getElementById('end_date').min = this.value;
+});
+
+// Calculate per person budget when inputs change
+document.getElementById('budget_total').addEventListener('input', calculatePerPerson);
+document.getElementById('participants').addEventListener('input', calculatePerPerson);
+
+// Initial calculation
+calculatePerPerson();
+</script>
+{% endblock %}

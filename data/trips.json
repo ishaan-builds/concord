@@ -1,0 +1,22 @@
+{
+  "8b2fbe83": {
+    "id": "8b2fbe83",
+    "name": "Florida '25",
+    "description": "yjhh",
+    "destination": "Sarasota, Florida",
+    "start_date": "2025-09-30",
+    "end_date": "2025-10-08",
+    "organizer_name": "Charlie Beck",
+    "organizer_email": "chabeck@umich.edu",
+    "participants": [],
+    "members_count": 1,
+    "budget_total": 0,
+    "budget_per_person": 0,
+    "inbox_id": "uninterestedstate21@agentmail.to",
+    "inbox_email": "uninterestedstate21@agentmail.to",
+    "webhook_id": "eaf01689-205a-42ad-a7ad-ca82d74adcf0",
+    "webhook_url": "https://sclerosed-wilhemina-heapy.ngrok-free.dev/webhook/8b2fbe83",
+    "created_at": "2025-09-27T16:24:24.994376",
+    "itinerary_file": "/Users/chabeck/Developer/personal/concord/data/itinerary_8b2fbe83.json"
+  }
+}

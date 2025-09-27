@@ -84,7 +84,7 @@ class ChatbotEngine:
             context_parts.append(f"**Budget per Person**: {itinerary.currency} {itinerary.budget_per_person}")
         
         # Events organized by date
-        context_parts.append("\\n## Itinerary Events")
+        context_parts.append("\n## Itinerary Events")
         
         # Group events by date
         events_by_date = {}
@@ -95,7 +95,7 @@ class ChatbotEngine:
             events_by_date[event_date].append(event)
         
         for event_date, events in events_by_date.items():
-            context_parts.append(f"\\n### {event_date.strftime('%A, %B %d, %Y')}")
+            context_parts.append(f"\n### {event_date.strftime('%A, %B %d, %Y')}")
             for event in events:
                 time_str = event.start_datetime.strftime('%H:%M')
                 if event.end_datetime:
@@ -116,7 +116,7 @@ class ChatbotEngine:
         
         # Emergency contacts
         if itinerary.emergency_contacts:
-            context_parts.append("\\n## Emergency Contacts")
+            context_parts.append("\n## Emergency Contacts")
             for contact in itinerary.emergency_contacts:
                 contact_info = f"- **{contact.name}**"
                 if contact.phone:
@@ -127,11 +127,11 @@ class ChatbotEngine:
         
         # Important information
         if itinerary.important_info:
-            context_parts.append("\\n## Important Information")
+            context_parts.append("\n## Important Information")
             for key, value in itinerary.important_info.items():
                 context_parts.append(f"- **{key}**: {value}")
         
-        return "\\n".join(context_parts)
+        return "\n".join(context_parts)
     
     def get_message_history_context(self, messages: List[Message], limit: int = 10) -> str:
         """
@@ -163,7 +163,7 @@ class ChatbotEngine:
             
             context_parts.append(f"**{sender}** ({timestamp}): {body}")
         
-        return "\\n".join(context_parts)
+        return "\n".join(context_parts)
     
     def extract_query_intent(self, query: str) -> Tuple[str, Dict[str, Any]]:
         """
@@ -387,8 +387,8 @@ class ChatbotEngine:
         formatted_response = response
         
         if suggestions:
-            formatted_response += "\\n\\n**You might also want to ask:**\\n"
+            formatted_response += "\n\n**You might also want to ask:**\n"
             for i, suggestion in enumerate(suggestions[:3], 1):  # Limit to 3 suggestions
-                formatted_response += f"{i}. {suggestion}\\n"
+                formatted_response += f"{i}. {suggestion}\n"
         
         return formatted_response

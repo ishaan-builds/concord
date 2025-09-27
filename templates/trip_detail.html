@@ -1,0 +1,363 @@
+{% extends "base.html" %}
+
+{% block title %}{{ trip.name }} - Trip Details{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <!-- Trip Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Home</a></li>
+                    <li class="breadcrumb-item active">{{ trip.name }}</li>
+                </ol>
+            </nav>
+            
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <h1 class="display-6 mb-2">{{ trip.name }}</h1>
+                    <p class="text-muted lead">{{ trip.description or 'No description provided' }}</p>
+                </div>
+                <span class="badge bg-success fs-6">Active</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Trip Information -->
+        <div class="col-lg-8">
+            <!-- Basic Info Card -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-info-circle me-2"></i>Trip Information
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="text-muted">Destination</h6>
+                            <p class="mb-3">
+                                <i class="fas fa-map-marker-alt text-primary me-2"></i>
+                                {{ trip.destination or 'Not specified' }}
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="text-muted">Duration</h6>
+                            <p class="mb-3">
+                                <i class="fas fa-calendar text-primary me-2"></i>
+                                {{ trip.start_date }} to {{ trip.end_date }}
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="text-muted">Organizer</h6>
+                            <p class="mb-3">
+                                <i class="fas fa-user-tie text-primary me-2"></i>
+                                {{ trip.organizer_name }} ({{ trip.organizer_email }})
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="text-muted">Participants</h6>
+                            <p class="mb-3">
+                                <i class="fas fa-users text-primary me-2"></i>
+                                {{ (trip.participants|length) + 1 }} people
+                            </p>
+                        </div>
+                        {% if trip.budget_total > 0 %}
+                        <div class="col-md-6">
+                            <h6 class="text-muted">Total Budget</h6>
+                            <p class="mb-3">
+                                <i class="fas fa-dollar-sign text-primary me-2"></i>
+                                ${{ "%.2f"|format(trip.budget_total) }}
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="text-muted">Per Person</h6>
+                            <p class="mb-3">
+                                <i class="fas fa-calculator text-primary me-2"></i>
+                                ${{ "%.2f"|format(trip.budget_per_person) }}
+                            </p>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    {% if trip.participants %}
+                    <hr>
+                    <h6 class="text-muted">Participant List</h6>
+                    <div class="row">
+                        <div class="col-12">
+                            <ul class="list-group list-group-flush">
+                                <li class="list-group-item d-flex align-items-center">
+                                    <i class="fas fa-crown text-warning me-2"></i>
+                                    <strong>{{ trip.organizer_name }}</strong>
+                                    <span class="badge bg-primary ms-2">Organizer</span>
+                                </li>
+                                {% for participant in trip.participants %}
+                                <li class="list-group-item">
+                                    <i class="fas fa-user text-muted me-2"></i>
+                                    {{ participant }}
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Test Chatbot Card -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-robot me-2"></i>Test Your AI Assistant
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">Try asking your AI assistant questions about the trip:</p>
+                    
+                    <div id="chatContainer" class="chatbot-test" style="max-height: 400px; overflow-y: auto;">
+                        <div class="chat-message">
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="fas fa-robot text-primary me-2"></i>
+                                <strong>AI Assistant</strong>
+                            </div>
+                            <p class="mb-0">Hello! I'm your AI trip assistant for {{ trip.name }}. Ask me anything about your trip!</p>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3">
+                        <div class="input-group">
+                            <input type="text" id="chatInput" class="form-control chat-input" 
+                                   placeholder="Ask something about your trip..." 
+                                   onkeypress="if(event.key==='Enter') sendMessage()">
+                            <button class="btn btn-primary" onclick="sendMessage()">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                        <div class="mt-2">
+                            <small class="text-muted">Try: "What's our budget?" or "When does the trip start?"</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- AgentMail Info Sidebar -->
+        <div class="col-lg-4">
+            <!-- Email Address Card -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-envelope me-2"></i>AgentMail Inbox
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <h6 class="text-muted">Email Address</h6>
+                    <div class="input-group mb-3">
+                        <input type="text" class="form-control" value="{{ trip.inbox_email }}" readonly id="emailAddress">
+                        <button class="btn btn-outline-primary" onclick="copyEmail()">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                    </div>
+                    
+                    <h6 class="text-muted">Instructions</h6>
+                    <ol class="small">
+                        <li>Share this email address with your trip participants</li>
+                        <li>They can send questions directly to this inbox</li>
+                        <li>The AI will automatically respond with trip information</li>
+                        <li>All responses are based on the details you provided</li>
+                    </ol>
+                    
+                    <div class="alert alert-info small">
+                        <i class="fas fa-lightbulb me-2"></i>
+                        <strong>Pro Tip:</strong> The AI can answer questions about dates, budget, participants, and general trip information.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Technical Details Card -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-cog me-2"></i>Technical Details
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <h6 class="text-muted">Trip ID</h6>
+                        <code>{{ trip.id }}</code>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <h6 class="text-muted">Inbox ID</h6>
+                        <code>{{ trip.inbox_id }}</code>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <h6 class="text-muted">Webhook URL</h6>
+                        <small class="text-break">{{ trip.webhook_url }}</small>
+                    </div>
+                    
+                    <div class="mb-0">
+                        <h6 class="text-muted">Created</h6>
+                        <small>{{ trip.created_at[:19] | replace('T', ' ') }}</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Actions Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-tools me-2"></i>Actions
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-outline-primary" onclick="copyEmail()">
+                            <i class="fas fa-copy me-2"></i>Copy Email Address
+                        </button>
+                        <button class="btn btn-outline-danger" onclick="deleteTrip()">
+                            <i class="fas fa-trash me-2"></i>Delete Trip
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete confirmation modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete the trip "{{ trip.name }}"?</p>
+                <p class="text-muted">This will remove the trip, its inbox, and all associated data. This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form action="{{ url_for('delete_trip', trip_id=trip.id) }}" method="POST" style="display: inline;">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash me-1"></i>Delete Trip
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function copyEmail() {
+    const emailInput = document.getElementById('emailAddress');
+    emailInput.select();
+    document.execCommand('copy');
+    
+    // Show toast
+    const toast = document.createElement('div');
+    toast.className = 'alert alert-success position-fixed';
+    toast.style.top = '20px';
+    toast.style.right = '20px';
+    toast.style.zIndex = '9999';
+    toast.innerHTML = '<i class="fas fa-check me-2"></i>Email address copied to clipboard!';
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        document.body.removeChild(toast);
+    }, 3000);
+}
+
+function deleteTrip() {
+    new bootstrap.Modal(document.getElementById('deleteModal')).show();
+}
+
+function sendMessage() {
+    const input = document.getElementById('chatInput');
+    const query = input.value.trim();
+    
+    if (!query) return;
+    
+    // Add user message to chat
+    const chatContainer = document.getElementById('chatContainer');
+    const userMessage = document.createElement('div');
+    userMessage.className = 'chat-message';
+    userMessage.innerHTML = `
+        <div class="d-flex align-items-center mb-2">
+            <i class="fas fa-user text-success me-2"></i>
+            <strong>You</strong>
+        </div>
+        <p class="mb-0">${query}</p>
+    `;
+    chatContainer.appendChild(userMessage);
+    
+    // Clear input
+    input.value = '';
+    
+    // Add loading message
+    const loadingMessage = document.createElement('div');
+    loadingMessage.className = 'chat-message';
+    loadingMessage.innerHTML = `
+        <div class="d-flex align-items-center mb-2">
+            <i class="fas fa-robot text-primary me-2"></i>
+            <strong>AI Assistant</strong>
+        </div>
+        <p class="mb-0">
+            <i class="fas fa-spinner fa-spin me-2"></i>Thinking...
+        </p>
+    `;
+    chatContainer.appendChild(loadingMessage);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+    
+    // Send request
+    fetch(`/trip/{{ trip.id }}/test`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query: query })
+    })
+    .then(response => response.json())
+    .then(data => {
+        // Remove loading message
+        chatContainer.removeChild(loadingMessage);
+        
+        // Add AI response
+        const aiMessage = document.createElement('div');
+        aiMessage.className = 'chat-message';
+        aiMessage.innerHTML = `
+            <div class="d-flex align-items-center mb-2">
+                <i class="fas fa-robot text-primary me-2"></i>
+                <strong>AI Assistant</strong>
+            </div>
+            <p class="mb-0">${data.response.replace(/\n/g, '<br>')}</p>
+        `;
+        chatContainer.appendChild(aiMessage);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    })
+    .catch(error => {
+        // Remove loading message
+        chatContainer.removeChild(loadingMessage);
+        
+        // Add error message
+        const errorMessage = document.createElement('div');
+        errorMessage.className = 'chat-message border-danger';
+        errorMessage.innerHTML = `
+            <div class="d-flex align-items-center mb-2">
+                <i class="fas fa-exclamation-triangle text-danger me-2"></i>
+                <strong>Error</strong>
+            </div>
+            <p class="mb-0">Sorry, I encountered an error. Please try again.</p>
+        `;
+        chatContainer.appendChild(errorMessage);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    });
+}
+</script>
+{% endblock %}
