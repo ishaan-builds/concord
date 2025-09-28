@@ -92,10 +92,10 @@
         
         <div class="feature-grid fade-in-stagger">
             {% for trip_id, trip in trips.items() %}
-            <div class="card glow-on-hover" style="animation-delay: {{ loop.index0 * 0.1 }}s;">
+            <div class="card glow-on-hover">
                 <div class="card-body">
                     <div class="flex items-center gap-3 mb-4">
-                        <div class="feature-icon floating-icon" style="margin: 0; width: 40px; height: 40px; animation-delay: {{ loop.index0 * 0.5 }}s;">
+                        <div class="feature-icon floating-icon" style="margin: 0; width: 40px; height: 40px;">
                             <i class="fas fa-satellite-dish"></i>
                         </div>
                         <div>
@@ -186,4 +186,5 @@ function copyEmail(email) {
         console.error('Failed to copy email: ', err);
     });
 }
-</script>\n{% endblock %}
+</script>
+{% endblock %}

@@ -272,7 +272,7 @@ class ChatbotEngine:
             system_prompt = f"""You are a helpful AI assistant for a group trip coordination chatbot with advanced content analysis capabilities.
 
             ## Your Responsibilities:
-            1. Answer questions about the trip itinerary and logistics
+            1. Answer questions about the trip
             2. Analyze incoming messages to extract valuable information for future reference
             3. Classify content to optimize our knowledge storage system (RAG)
 
@@ -305,7 +305,7 @@ class ChatbotEngine:
             ## Response Guidelines:
             - Always provide a helpful response to any questions
             - Acknowledge when you've received and understood new information
-            - Be friendly and concise
+            - Be friendly and concise, but provide information that is requested in detail
             - If unsure about classification, err on the side of storing useful information
             
             ## JSON Response Format:

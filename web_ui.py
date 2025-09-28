@@ -22,6 +22,7 @@ from src.config import get_settings
 from src.agentmail_client import AgentMailClient
 from src.itinerary_models import TripItinerary, Location, GroupMember
 from src.message_processor import process_message_and_get_reply
+from src.markdown_converter import format_ai_response
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -87,11 +88,7 @@ def _create_unique_inbox(agentmail_client: AgentMailClient, base_name: str, disp
     raise Exception(f"Could not find a unique inbox name for '{slug}' after 100 attempts.")
 
 
-def _convert_text_to_html(text: str) -> str:
-    """UI helper to format plain text from the AI into simple HTML."""
-    html = text.replace('\n', '<br>')
-    html = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', html)
-    return f'<p>{html}</p>'
+# Removed old _convert_text_to_html function - now using comprehensive markdown_converter
 
 def load_trips_from_file():
     """Load trip data from persistent JSON file."""
@@ -148,13 +145,16 @@ def create_trip():
             display_name=inbox_display_name
         )
         
-        # Construct the email address from the inbox_id
-        # AgentMail inboxes have email addresses in the format: {inbox_id}@agentmail.to
-        inbox_email = f"{inbox.inbox_id}@agentmail.to"
+        # Get the email address from the inbox object
+        # Check if inbox_id already contains the full email or just the username part
+        if '@' in inbox.inbox_id:
+            inbox_email = inbox.inbox_id  # It's already a full email address
+        else:
+            inbox_email = f"{inbox.inbox_id}@agentmail.to"  # Add domain if needed
         logger.info(f"Constructed inbox email: {inbox_email}")
         
         base_webhook_url = settings.webhook.url.rstrip('/')
-        webhook_url = f"{base_webhook_url}/webhook/{trip_id}"
+        webhook_url = f"{base_webhook_url}/{trip_id}"
         # Corrected line for webhook creation
         webhook = agentmail_client.webhooks.create(event_types=["message.received"], url=webhook_url)
 
@@ -185,23 +185,40 @@ def create_trip():
         TRIPS_STORE[trip_id] = trip_data
         save_trips_to_file()
         
-        flash(f'Trip "{trip_name}" created successfully!', 'success')
-        return redirect(url_for('trip_detail', trip_id=trip_id))
+        # Check if this is an AJAX request expecting JSON (check for XMLHttpRequest header or Accept header)
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or 'application/json' in request.headers.get('Accept', ''):
+            return jsonify({
+                'success': True,
+                'message': f'Trip "{trip_name}" created successfully!',
+                'redirect_url': url_for('trip_detail', trip_id=trip_id)
+            })
+        else:
+            flash(f'Trip "{trip_name}" created successfully!', 'success')
+            return redirect(url_for('trip_detail', trip_id=trip_id))
         
     except Exception as e:
         logger.error(f"Error creating trip: {e}", exc_info=True)
         
         # Provide more user-friendly error messages
+        error_message = ""
         if 'api_key' in str(e).lower():
-            flash('API configuration error. Please check your AgentMail settings.', 'error')
+            error_message = 'API configuration error. Please check your AgentMail settings.'
         elif 'connection' in str(e).lower() or 'network' in str(e).lower():
-            flash('Network connection error. Please check your internet connection and try again.', 'error')
+            error_message = 'Network connection error. Please check your internet connection and try again.'
         elif 'webhook' in str(e).lower():
-            flash('Webhook configuration error. Please check your webhook settings.', 'error')
+            error_message = 'Webhook configuration error. Please check your webhook settings.'
         else:
-            flash(f'An unexpected error occurred while creating the trip. Please try again.', 'error')
+            error_message = f'An unexpected error occurred while creating the trip. Please try again.'
         
-        return redirect(url_for('create_form'))
+        # Check if this is an AJAX request expecting JSON (check for XMLHttpRequest header or Accept header)
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or 'application/json' in request.headers.get('Accept', ''):
+            return jsonify({
+                'success': False,
+                'error': error_message
+            }), 400
+        else:
+            flash(error_message, 'error')
+            return redirect(url_for('create_form'))
 
 @app.route('/trip/<trip_id>')
 def trip_detail(trip_id):
@@ -243,7 +260,7 @@ def chatbot(trip_id):
 
         ai_reply_text = process_message_and_get_reply(trip_id, query, sender, message_id, chat_history)
         
-        html_formatted_response = _convert_text_to_html(ai_reply_text)
+        html_formatted_response = format_ai_response(ai_reply_text)
         
         # Build updated history for the frontend to maintain conversation state
         updated_history = chat_history + [f"User: {query}", f"Assistant: {ai_reply_text}"]
@@ -328,6 +345,6 @@ def delete_trip(trip_id):
 
 if __name__ == '__main__':
     os.makedirs(os.path.join(project_root, 'data'), exist_ok=True)
-    port = int(os.environ.get('WEB_UI_PORT', 5001))
+    port = int(os.environ.get('WEB_UI_PORT', 5002))
     debug = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
     app.run(host='0.0.0.0', port=port, debug=debug)

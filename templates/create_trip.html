@@ -37,13 +37,56 @@
                     <p class="form-help">Optional: helps the AI provide location-specific recommendations</p>
                 </div>
                 
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label for="start_date" class="form-label required">Start Date</label>
+                        <input type="date" 
+                               class="form-control" 
+                               id="start_date" 
+                               name="start_date" 
+                               required>
+                        <div class="form-error"></div>
+                    </div>
+                    <div class="form-group">
+                        <label for="end_date" class="form-label required">End Date</label>
+                        <input type="date" 
+                               class="form-control" 
+                               id="end_date" 
+                               name="end_date" 
+                               required>
+                        <div class="form-error"></div>
+                    </div>
+                </div>
+                
                 <div class="form-group">
-                    <label for="description" class="form-label">Trip Details</label>
+                    <label for="organizer_name" class="form-label required">Organizer Name</label>
+                    <input type="text" 
+                           class="form-control" 
+                           id="organizer_name" 
+                           name="organizer_name" 
+                           placeholder="Your name" 
+                           required>
+                    <div class="form-error"></div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="organizer_email" class="form-label required">Organizer Email</label>
+                    <input type="email" 
+                           class="form-control" 
+                           id="organizer_email" 
+                           name="organizer_email" 
+                           placeholder="your.email@example.com" 
+                           required>
+                    <div class="form-error"></div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="trip_description" class="form-label">Trip Details</label>
                     <textarea class="form-control" 
-                              id="description" 
-                              name="description" 
+                              id="trip_description" 
+                              name="trip_description" 
                               rows="4" 
-                              placeholder="Share details about your trip plans, dates, activities, or any specific information the AI should know..."></textarea>
+                              placeholder="Share details about your trip plans, activities, or any specific information the AI should know..."></textarea>
                     <p class="form-help">Optional: provide context to help your AI assistant give better responses</p>
                 </div>
                 
@@ -99,10 +142,49 @@ document.getElementById('create-trip-form').addEventListener('submit', function(
     // Validate form
     let isValid = true;
     const tripName = form.querySelector('#trip_name');
+    const startDate = form.querySelector('#start_date');
+    const endDate = form.querySelector('#end_date');
+    const organizerName = form.querySelector('#organizer_name');
+    const organizerEmail = form.querySelector('#organizer_email');
     
     if (!tripName.value.trim()) {
         tripName.classList.add('error');
         tripName.parentElement.querySelector('.form-error').textContent = 'Trip name is required';
+        isValid = false;
+    }
+    
+    if (!startDate.value) {
+        startDate.classList.add('error');
+        startDate.parentElement.querySelector('.form-error').textContent = 'Start date is required';
+        isValid = false;
+    }
+    
+    if (!endDate.value) {
+        endDate.classList.add('error');
+        endDate.parentElement.querySelector('.form-error').textContent = 'End date is required';
+        isValid = false;
+    }
+    
+    if (!organizerName.value.trim()) {
+        organizerName.classList.add('error');
+        organizerName.parentElement.querySelector('.form-error').textContent = 'Organizer name is required';
+        isValid = false;
+    }
+    
+    if (!organizerEmail.value.trim()) {
+        organizerEmail.classList.add('error');
+        organizerEmail.parentElement.querySelector('.form-error').textContent = 'Organizer email is required';
+        isValid = false;
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(organizerEmail.value)) {
+        organizerEmail.classList.add('error');
+        organizerEmail.parentElement.querySelector('.form-error').textContent = 'Please enter a valid email address';
+        isValid = false;
+    }
+    
+    // Validate date range
+    if (startDate.value && endDate.value && new Date(startDate.value) > new Date(endDate.value)) {
+        endDate.classList.add('error');
+        endDate.parentElement.querySelector('.form-error').textContent = 'End date must be after start date';
         isValid = false;
     }
     
@@ -118,10 +200,27 @@ document.getElementById('create-trip-form').addEventListener('submit', function(
     
     fetch(form.action, {
         method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json'
+        },
         body: formData
     })
-    .then(response => response.json())
+    .then(response => {
+        console.log('Response status:', response.status);
+        console.log('Response headers:', response.headers);
+        return response.text().then(text => {
+            console.log('Raw response:', text);
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                console.error('JSON parse error:', e);
+                throw new Error('Invalid JSON response: ' + text.substring(0, 100));
+            }
+        });
+    })
     .then(data => {
+        console.log('Parsed data:', data);
         if (data.success) {
             window.location.href = data.redirect_url;
         } else {

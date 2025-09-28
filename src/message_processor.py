@@ -1,5 +1,6 @@
 import logging
 import json
+import os
 from datetime import datetime
 import chromadb
 import re
@@ -69,10 +70,25 @@ def process_message_and_get_reply(trip_id: str, query: str, sender: str, message
         if not trip_data:
             raise ValueError(f"Trip {trip_id} not found.")
 
-        with open(trip_data['itinerary_file'], 'r') as f:
-            itinerary = TripItinerary.from_json(f.read())
-        
-        chatbot_engine.set_itinerary(itinerary)
+        # Check if itinerary file exists
+        itinerary_file = trip_data.get('itinerary_file')
+        if itinerary_file and os.path.exists(itinerary_file):
+            with open(itinerary_file, 'r') as f:
+                itinerary = TripItinerary.from_json(f.read())
+            chatbot_engine.set_itinerary(itinerary)
+        else:
+            # Create a minimal itinerary if file doesn't exist
+            logger.warning(f"Itinerary file not found for trip {trip_id}. Creating minimal itinerary.")
+            itinerary = TripItinerary(
+                id=trip_id,
+                name=trip_data.get('name', f'Trip {trip_id}'),
+                destination=trip_data.get('destination', 'Unknown'),
+                start_date="TBD",
+                end_date="TBD",
+                participants=[],
+                days=[]
+            )
+            chatbot_engine.set_itinerary(itinerary)
         
         # 2. Get RAG context from ChromaDB
         collection = chroma_client.get_or_create_collection(trip_id)

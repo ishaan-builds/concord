@@ -7,6 +7,8 @@ from quotequail import quote
 
 from .agentmail_client import AgentMailClient
 from .message_processor import process_message_and_get_reply  # <-- New Import
+from .config import get_settings
+from .markdown_converter import format_ai_response_for_email
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -85,14 +87,29 @@ class WebhookServer:
             thread = self.agentmail_client.threads.get(thread_id=message_data.get("thread_id"))
 
             # 4. Delegate all the core logic to the central processor
-            ai_reply_text = process_message_and_get_reply(trip_id, query, sender, message_id, thread=thread)
+            ai_reply_text = process_message_and_get_reply(trip_id, query, sender, message_id, thread)
             
-            # 5. Send the reply via AgentMail
-            self.agentmail_client.inboxes.messages.reply(
-                inbox_id=inbox_id,
-                message_id=message_id,
-                text=ai_reply_text
-            )
+            # 5. Format the AI response with markdown-to-HTML conversion for email
+            formatted_reply = format_ai_response_for_email(ai_reply_text)
+            
+            # 6. Send the reply via AgentMail (try HTML first, fallback to text)
+            try:
+                self.agentmail_client.inboxes.messages.reply(
+                    inbox_id=inbox_id,
+                    message_id=message_id,
+                    html=formatted_reply,
+                    text=ai_reply_text  # Fallback plain text
+                )
+                logger.info(f"Sent formatted AI reply (HTML) to {sender} for trip {trip_id}")
+            except Exception as html_error:
+                logger.warning(f"HTML email failed, falling back to plain text: {html_error}")
+                # Fallback to plain text if HTML isn't supported
+                self.agentmail_client.inboxes.messages.reply(
+                    inbox_id=inbox_id,
+                    message_id=message_id,
+                    text=ai_reply_text
+                )
+                logger.info(f"Sent plain text AI reply to {sender} for trip {trip_id}")
             logger.info(f"Sent AI reply to {sender} for trip {trip_id}")
 
         except Exception as e:

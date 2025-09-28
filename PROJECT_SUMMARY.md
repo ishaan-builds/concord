@@ -192,7 +192,6 @@ Potential extensions you could add:
 
 - **Multi-language support**: Translate responses based on user preference
 - **Calendar integration**: Sync with Google Calendar, Outlook
-- **SMS support**: Add Twilio for SMS responses
 - **Web dashboard**: Build admin interface for itinerary management
 - **Analytics**: Track usage patterns and popular queries
 - **Voice integration**: Add voice message support
