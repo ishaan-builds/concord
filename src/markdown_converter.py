@@ -3,8 +3,6 @@ Markdown to HTML converter for AI responses.
 Supports common markdown formatting used by AI models.
 """
 import re
-from typing import List
-
 
 class MarkdownToHtmlConverter:
     """Convert markdown text to HTML with support for common AI formatting patterns."""

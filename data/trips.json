@@ -1,11 +1,92 @@
 {
-  "19683136": {
-    "id": "19683136",
+  "5c827ff9": {
+    "id": "5c827ff9",
     "name": "Florida '25",
-    "inbox_id": "florida-255@agentmail.to",
-    "inbox_email": "florida-255@agentmail.to",
-    "webhook_id": "5246929f-bea2-442c-a109-922e508b9a58",
-    "itinerary_file": "/Users/chabeck/Developer/personal/concord/data/itinerary_19683136.json",
-    "created_at": "2025-09-28T11:23:47.799959"
+    "inbox_id": "florida-256@agentmail.to",
+    "inbox_email": "florida-256@agentmail.to",
+    "webhook_id": "d50e2eef-d6cd-4e0e-b488-a580803c56c1",
+    "itinerary_file": "/Users/chabeck/Developer/personal/concord/data/itinerary_5c827ff9.json",
+    "created_at": "2025-09-28T12:14:00.460774"
+  },
+  "d16034a1": {
+    "id": "d16034a1",
+    "name": "Greece '26",
+    "inbox_id": "greece-26@agentmail.to",
+    "inbox_email": "greece-26@agentmail.to",
+    "webhook_id": "e00da840-2af4-40e7-a78b-12c1278f55cc",
+    "itinerary_file": "/Users/chabeck/Developer/personal/concord/data/itinerary_d16034a1.json",
+    "created_at": "2025-09-28T13:26:34.470696"
+  },
+  "42c28f08": {
+    "id": "42c28f08",
+    "name": "Hawaii",
+    "inbox_id": "hawaii@agentmail.to",
+    "inbox_email": "hawaii@agentmail.to",
+    "webhook_id": "54e6791e-c86c-49f4-9d9f-0c26b12178cf",
+    "itinerary_file": "/Users/chabeck/Developer/personal/concord/data/itinerary_42c28f08.json",
+    "created_at": "2025-09-28T13:30:44.315579"
+  },
+  "e2eb45fd": {
+    "id": "e2eb45fd",
+    "name": "Paris 2025",
+    "inbox_id": "paris-2025@agentmail.to",
+    "inbox_email": "paris-2025@agentmail.to",
+    "webhook_id": "23600188-867f-4b39-b301-02e2c69c20d2",
+    "itinerary_file": "/Users/chabeck/Developer/personal/concord/data/itinerary_e2eb45fd.json",
+    "created_at": "2025-09-28T13:55:02.682024"
+  },
+  "fa2e44d5": {
+    "id": "fa2e44d5",
+    "name": "North Korea",
+    "inbox_id": "north-korea@agentmail.to",
+    "inbox_email": "north-korea@agentmail.to",
+    "webhook_id": "52d5bddb-1219-42dc-871e-ced4ec6cad98",
+    "itinerary_file": "/Users/chabeck/Developer/personal/concord/data/itinerary_fa2e44d5.json",
+    "created_at": "2025-09-28T14:08:37.472442"
+  },
+  "29af4dc6": {
+    "id": "29af4dc6",
+    "name": "Burma Vaca",
+    "inbox_id": "burma-vaca@agentmail.to",
+    "inbox_email": "burma-vaca@agentmail.to",
+    "webhook_id": "f6821954-9cd8-4477-96b5-dcd5232e6331",
+    "itinerary_file": "/Users/chabeck/Developer/personal/concord/data/itinerary_29af4dc6.json",
+    "created_at": "2025-09-28T14:17:37.236510"
+  },
+  "71cd794e": {
+    "id": "71cd794e",
+    "name": "NYC",
+    "inbox_id": "nyc@agentmail.to",
+    "inbox_email": "nyc@agentmail.to",
+    "webhook_id": "a1fc5a61-f1c1-438e-8ee7-ae52fe5fb8a9",
+    "itinerary_file": "/Users/chabeck/Developer/personal/concord/data/itinerary_71cd794e.json",
+    "created_at": "2025-09-28T14:56:45.190497"
+  },
+  "497e5114": {
+    "id": "497e5114",
+    "name": "Thailand",
+    "inbox_id": "thailand@agentmail.to",
+    "inbox_email": "thailand@agentmail.to",
+    "webhook_id": "7ba5bc7b-179f-43bb-85d1-04e573100b1b",
+    "itinerary_file": "/Users/chabeck/Developer/personal/concord/data/itinerary_497e5114.json",
+    "created_at": "2025-09-28T15:04:26.295501"
+  },
+  "7a7d3db8": {
+    "id": "7a7d3db8",
+    "name": "Hawaii",
+    "inbox_id": "hawaii1@agentmail.to",
+    "inbox_email": "hawaii1@agentmail.to",
+    "webhook_id": "f7c2a4e1-fc4a-478b-a97e-4271eb86f6be",
+    "itinerary_file": "/Users/chabeck/Developer/personal/concord/data/itinerary_7a7d3db8.json",
+    "created_at": "2025-09-28T15:08:53.190441"
+  },
+  "be58d859": {
+    "id": "be58d859",
+    "name": "Florida '25",
+    "inbox_id": "florida-257@agentmail.to",
+    "inbox_email": "florida-257@agentmail.to",
+    "webhook_id": "36806b7e-d880-43c5-a777-3a9d40d6f62f",
+    "itinerary_file": "/Users/chabeck/Developer/personal/concord/data/itinerary_be58d859.json",
+    "created_at": "2025-09-28T15:46:33.611843"
   }
 }

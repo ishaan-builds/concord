@@ -5,7 +5,6 @@ import logging
 from typing import Optional
 
 from agentmail import AgentMail as AgentMailSDK
-from agentmail import Message
 
 logger = logging.getLogger(__name__)
 

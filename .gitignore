@@ -5,3 +5,4 @@
 /db/
 logs/
 ngrok
+.env

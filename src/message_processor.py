@@ -3,7 +3,6 @@ import json
 import os
 from datetime import datetime
 import chromadb
-import re
 
 from .config import get_settings
 from .chatbot_engine import ChatbotEngine

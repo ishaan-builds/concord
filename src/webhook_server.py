@@ -6,8 +6,7 @@ from typing import Dict, Any
 from quotequail import quote
 
 from .agentmail_client import AgentMailClient
-from .message_processor import process_message_and_get_reply  # <-- New Import
-from .config import get_settings
+from .message_processor import process_message_and_get_reply
 from .markdown_converter import format_ai_response_for_email
 
 logging.basicConfig(level=logging.INFO)

@@ -3,7 +3,7 @@ Data models for storing and managing group itinerary information.
 """
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field, asdict
-from datetime import datetime, date, time
+from datetime import datetime, date
 from enum import Enum
 import json
 
