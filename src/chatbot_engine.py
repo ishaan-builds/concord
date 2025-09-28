@@ -2,8 +2,10 @@
 AI-powered chatbot engine for processing group itinerary queries.
 """
 import logging
+import os
+import uuid
 from typing import Dict, List, Optional, Any, Tuple, Union
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from chromadb import Collection  
 from pydantic import BaseModel, Field
 from enum import Enum
@@ -15,11 +17,35 @@ from .agentmail_client import AgentMailClient, Message
 
 logger = logging.getLogger(__name__)
 
+class LocationData(BaseModel):
+    """Location information for events."""
+    name: str = Field(description="Name of the location")
+    city: Optional[str] = Field(description="City name", default=None)
+
+class EventData(BaseModel):
+    """Event data structure."""
+    title: str = Field(description="Event title")
+    event_type: str = Field(description="Type of event: restaurant, activity, hotel, flight, transport, meeting, free_time, other")
+    start_datetime: str = Field(description="Start date and time in YYYY-MM-DD HH:MM:SS format")
+    end_datetime: str = Field(description="End date and time in YYYY-MM-DD HH:MM:SS format")
+    location: LocationData = Field(description="Location information")
+    description: str = Field(description="Event description")
+    cost: float = Field(description="Cost of the event", default=0.0)
+    priority: str = Field(description="Priority level: high, medium, low", default="medium")
+
+class ItineraryAction(BaseModel):
+    """Represents an action to take on the itinerary."""
+    action_type: str = Field(description="Type of action: add_event, remove_event, modify_event, or none")
+    event_data: Optional[EventData] = Field(description="Event data for add/modify actions", default=None)
+    removal_criteria: Optional[str] = Field(description="Criteria for removing events", default=None)
+    reasoning: str = Field(description="AI's reasoning for this scheduling decision")
+
 class EmailAnalysis(BaseModel):
-    """Simplified email analysis: pure questions vs facts."""
+    """Enhanced email analysis with itinerary management capabilities."""
     is_pure_question: bool = Field(description="True if this is only a question with no facts to store")
     facts_summary: str = Field(description="Summary of factual information to store. Empty if pure question.")
     query_response: str = Field(description="Response to send back to the user")
+    itinerary_actions: List[ItineraryAction] = Field(description="List of itinerary actions to perform", default=[])
 
 class ChatbotEngine:
     """AI-powered chatbot for group itinerary management."""
@@ -269,52 +295,71 @@ class ChatbotEngine:
             intent, extracted_data = self.extract_query_intent(query)
             
             # Build system prompt
-            system_prompt = f"""You are a helpful AI assistant for a group trip coordination chatbot with advanced content analysis capabilities.
+            system_prompt = f"""You are an intelligent AI trip coordinator with full authority to manage itineraries. You can add, remove, modify, and reschedule events based on user requests and smart reasoning.
 
-            ## Your Responsibilities:
-            1. Answer questions about the trip
-            2. Analyze incoming messages to extract valuable information for future reference
-            3. Classify content to optimize our knowledge storage system (RAG)
+            ## Your Capabilities:
+            1. **Answer questions** about the trip
+            2. **Analyze messages** to extract information for storage
+            3. **Manage the itinerary** - add/remove/modify events intelligently
+            4. **Make scheduling decisions** - choose optimal times, resolve conflicts, suggest alternatives
+            5. **Understand context** - consider trip theme, existing events, preferences, logistics
 
-            ## Simple Classification System:
-            
-            You need to determine if an email is:
-            1. **PURE QUESTION** - Only asking for information, no facts to store
-            2. **CONTAINS FACTS** - Has factual information that should be remembered
-            
-            ## Pure Questions (Don't Store):
-            - "What time is dinner?"
-            - "Where are we staying?" 
-            - "How much did we budget?"
-            - "What's the weather like?"
-            - "When do we leave?"
-            
-            ## Contains Facts (Store the Facts):
-            - "I'm vegetarian" → Store: "User is vegetarian" 
-            - "The hotel changed check-in to 4pm" → Store: "Hotel check-in changed to 4pm"
-            - "Where's dinner? Also I'm allergic to shellfish" → Store: "User is allergic to shellfish" (ignore the question)
-            - "My flight is delayed to 8pm" → Store: "User's flight delayed to 8pm"
-            - "I booked an Uber for 7am" → Store: "Uber booked for 7am pickup"
-            
-            ## Important:
-            - If a message has BOTH questions and facts, classify as "contains facts" and extract only the factual parts
-            - Focus on information that would be useful for trip coordination
-            - Keep fact summaries concise and clear
-            - Group members are confirmed participants unless stated otherwise
-            
-            ## Response Guidelines:
-            - Always provide a helpful response to any questions
-            - Acknowledge when you've received and understood new information
-            - Be friendly and concise, but provide information that is requested in detail
-            - If unsure about classification, err on the side of storing useful information
-            
-            ## JSON Response Format:
+            ## Itinerary Management Powers:
+            - **Smart Scheduling**: Choose logical times based on context (meals around meal times, activities during day, etc.)
+            - **Conflict Resolution**: Move or suggest alternatives when events conflict
+            - **Intelligent Categorization**: Determine event types (restaurant, activity, hotel, flight, etc.)
+            - **Location Awareness**: Use trip destination and context for realistic locations
+            - **Budget Consideration**: Factor in trip budget when suggesting events
+            - **Group Preferences**: Consider any stated preferences or past conversation
+
+            ## Event Types:
+            - `restaurant` - dining, meals, food venues
+            - `activity` - tours, attractions, experiences, sports
+            - `hotel` - accommodation, lodging
+            - `flight` - air travel
+            - `transport` - cars, buses, trains, local transport
+            - `meeting` - group meetings, check-ins
+            - `free_time` - unstructured time, breaks
+            - `other` - anything else
+
+            ## Smart Scheduling Examples:
+            - "Add Owens Fish Camp" → Schedule for appropriate meal time, detect as restaurant
+            - "We need dinner reservations" → Choose evening time, restaurant type
+            - "Book a morning tour" → Schedule for morning, activity type  
+            - "Cancel the 2pm meeting" → Remove specific event
+            - "Move dinner earlier" → Modify existing dinner event time
+
+            ## Response Format:
             You MUST respond with valid JSON in this exact format:
             {{
                 "is_pure_question": true/false,
                 "facts_summary": "Summary of factual information to store (empty string if pure question)",
-                "query_response": "Your helpful response to the user"
+                "query_response": "Your helpful response to the user",
+                "itinerary_actions": [
+                    {{
+                        "action_type": "add_event|remove_event|modify_event|none",
+                        "event_data": {{
+                            "title": "Event Name",
+                            "event_type": "restaurant|activity|hotel|flight|transport|meeting|free_time|other",
+                            "start_datetime": "YYYY-MM-DD HH:MM:SS",
+                            "end_datetime": "YYYY-MM-DD HH:MM:SS", 
+                            "location": {{"name": "Location Name", "city": "City"}},
+                            "description": "Event description",
+                            "cost": 0.0,
+                            "priority": "high|medium|low"
+                        }},
+                        "removal_criteria": "text to match for removal (only for remove_event)",
+                        "reasoning": "Why you chose this time/action"
+                    }}
+                ]
             }}
+
+            ## Guidelines:
+            - Use the trip's actual date range ({itinerary_context.split("**Dates**: ")[1].split("\\n")[0] if "**Dates**: " in itinerary_context else "dates not found"}) 
+            - Consider existing events to avoid conflicts
+            - Choose realistic times (breakfast 7-9am, lunch 12-2pm, dinner 6-9pm, activities 10am-6pm)
+            - Be specific with event details - real locations, accurate durations
+            - If unsure about timing, suggest options in your response
 
             ## Earlier Chat History(from least to most recent):
             {history if history else "None"}
@@ -339,24 +384,64 @@ class ChatbotEngine:
                 logger.info(f"Generation config: temperature={self.temperature}, max_output_tokens={self.max_tokens}")
                 logger.info(f"=== END GEMINI REQUEST ===")
                 
-                response = self.google_client.models.generate_content(
-                    model=self.model,
-                    contents=prompt,
-                    config=self.genai_types.GenerateContentConfig(
-                        temperature=self.temperature,
-                        max_output_tokens=self.max_tokens,
-                        response_mime_type="application/json",
-                        response_schema=EmailAnalysis
+                try:
+                    response = self.google_client.models.generate_content(
+                        model=self.model,
+                        contents=prompt,
+                        config=self.genai_types.GenerateContentConfig(
+                            temperature=self.temperature,
+                            max_output_tokens=self.max_tokens,
+                            response_mime_type="application/json",
+                            response_schema=EmailAnalysis
+                        )
                     )
-                )
-                parsed_response = response.parsed
+                    parsed_response = response.parsed
 
-                # Log the response we got back
-                logger.info(f"=== GEMINI RESPONSE ===")
-                logger.info(f"Response: {parsed_response}")
-                logger.info(f"=== END GEMINI RESPONSE ===")
-                
-                return parsed_response
+                    # Log the response we got back
+                    logger.info(f"=== GEMINI RESPONSE ===")
+                    logger.info(f"Response: {parsed_response}")
+                    logger.info(f"=== END GEMINI RESPONSE ===")
+                    
+                    return parsed_response
+                    
+                except Exception as schema_error:
+                    logger.warning(f"Schema response failed: {schema_error}, falling back to text parsing")
+                    
+                    # Fallback: Get text response and try to parse manually
+                    response = self.google_client.models.generate_content(
+                        model=self.model,
+                        contents=prompt,
+                        config=self.genai_types.GenerateContentConfig(
+                            temperature=self.temperature,
+                            max_output_tokens=self.max_tokens
+                        )
+                    )
+                    
+                    response_text = response.text.strip()
+                    logger.info(f"=== GEMINI FALLBACK RESPONSE ===")
+                    logger.info(f"Raw text: {response_text}")
+                    logger.info(f"=== END GEMINI FALLBACK ===")
+                    
+                    try:
+                        # Try to parse JSON from the text response
+                        import json
+                        if response_text.startswith('```json'):
+                            response_text = response_text.split('```json')[1].split('```')[0].strip()
+                        elif response_text.startswith('```'):
+                            response_text = response_text.split('```')[1].split('```')[0].strip()
+                        
+                        response_json = json.loads(response_text)
+                        parsed_response = EmailAnalysis(**response_json)
+                        return parsed_response
+                    except (json.JSONDecodeError, ValueError) as e:
+                        logger.error(f"Failed to parse Gemini JSON response: {e}")
+                        # Return a basic EmailAnalysis object
+                        return EmailAnalysis(
+                            is_pure_question=True,
+                            facts_summary="",
+                            query_response=response_text,
+                            itinerary_actions=[]
+                        )
             
             else:
                 # Use OpenAI (default)
@@ -460,4 +545,398 @@ class ChatbotEngine:
             
         return metadata
 
+    def extract_event_from_query(self, query: str, facts_summary: str) -> Optional[Dict[str, Any]]:
+        """
+        Extract event information from user query and facts summary.
+        
+        Args:
+            query: User's original query
+            facts_summary: AI's extracted facts
+            
+        Returns:
+            Dict with event data if event should be created, None otherwise
+        """
+        # Look for calendar/itinerary addition patterns
+        calendar_patterns = [
+            r"add.*to.*calendar",
+            r"add.*to.*itinerary", 
+            r"put.*on.*calendar",
+            r"schedule.*for",
+            r"book.*for"
+        ]
+        
+        query_lower = query.lower()
+        is_calendar_request = any(re.search(pattern, query_lower) for pattern in calendar_patterns)
+        
+        if not is_calendar_request:
+            return None
+            
+        # Try to extract event details from facts_summary and query
+        combined_text = f"{query} {facts_summary}".lower()
+        
+        event_data = {
+            "title": None,
+            "date": None,
+            "time": None,
+            "event_type": "other",
+            "description": facts_summary,
+            "location": None
+        }
+        
+        # Extract title from query - look for restaurant/place names
+        title_patterns = [
+            r"add\s+([^to]+)\s+to",  # "add Owens Fish Camp to"
+            r"book\s+([^for]+)\s+for",  # "book reservation for"
+            r"schedule\s+([^for]+)\s+for"  # "schedule visit for"
+        ]
+        
+        for pattern in title_patterns:
+            match = re.search(pattern, query, re.IGNORECASE)
+            if match:
+                potential_title = match.group(1).strip()
+                if potential_title and len(potential_title) > 2:
+                    event_data["title"] = potential_title.title()
+                    event_data["location"] = potential_title.title()
+                    break
+        
+        # Extract common event types - enhanced with restaurant detection
+        activity_keywords = {
+            "fishing": "activity",
+            "camp": "restaurant",  # Many fish camps are restaurants
+            "restaurant": "restaurant",
+            "bistro": "restaurant",
+            "cafe": "restaurant",
+            "diner": "restaurant",
+            "grill": "restaurant",
+            "dining": "restaurant", 
+            "dinner": "restaurant",
+            "lunch": "restaurant",
+            "breakfast": "restaurant",
+            "hotel": "hotel",
+            "inn": "hotel",
+            "resort": "hotel",
+            "flight": "flight",
+            "tour": "activity",
+            "hummer": "activity",
+            "hiking": "activity",
+            "spa": "activity",
+            "museum": "activity",
+            "beach": "activity"
+        }
+        
+        for keyword, event_type in activity_keywords.items():
+            if keyword in query_lower or keyword in facts_summary.lower():
+                event_data["event_type"] = event_type
+                if not event_data["title"]:
+                    event_data["title"] = keyword.title()
+                break
+        
+        # Extract dates and times using regex
+        from datetime import datetime
+        
+        # Look for date patterns in facts_summary
+        date_patterns = [
+            r"(\d{4}-\d{2}-\d{2})",  # YYYY-MM-DD
+            r"(\d{1,2}/\d{1,2}/\d{4})",  # MM/DD/YYYY
+            r"(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),?\s+(\d{4})"
+        ]
+        
+        for pattern in date_patterns:
+            match = re.search(pattern, facts_summary, re.IGNORECASE)
+            if match:
+                event_data["date"] = match.group(0)
+                break
+        
+        # Look for time patterns
+        time_patterns = [
+            r"(\d{1,2})-(\d{1,2})(am|pm)",  # 1-2pm
+            r"(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})",  # 13:00-14:00
+            r"from\s+(\d{1,2})\s*-\s*(\d{1,2})(am|pm)"  # from 1-2pm
+        ]
+        
+        for pattern in time_patterns:
+            match = re.search(pattern, facts_summary, re.IGNORECASE)
+            if match:
+                event_data["time"] = match.group(0)
+                break
+        
+        return event_data if any(event_data.values()) else None
+
+    def extract_removal_from_query(self, query: str, facts_summary: str) -> Optional[str]:
+        """
+        Extract event removal requests from user query.
+        
+        Args:
+            query: User's original query
+            facts_summary: AI's extracted facts
+            
+        Returns:
+            String with event name to remove, or None
+        """
+        # Look for removal patterns
+        removal_patterns = [
+            r"remove\s+(.+?)\s+from",
+            r"delete\s+(.+?)\s+from", 
+            r"cancel\s+(.+?)(?:\s+from|\s*$)",
+            r"take\s+(.+?)\s+off"
+        ]
+        
+        query_lower = query.lower()
+        
+        for pattern in removal_patterns:
+            match = re.search(pattern, query_lower)
+            if match:
+                item_to_remove = match.group(1).strip()
+                if item_to_remove and len(item_to_remove) > 2:
+                    return item_to_remove.title()
+        
+        return None
+
+    def remove_event_from_trip(self, trip_id: str, event_name: str) -> bool:
+        """
+        Remove an event from the trip JSON file.
+        
+        Args:
+            trip_id: ID of the trip
+            event_name: Name of event to remove
+            
+        Returns:
+            bool: True if event was removed successfully
+        """
+        try:
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            itinerary_file = os.path.join(project_root, 'data', f'itinerary_{trip_id}.json')
+            
+            if not os.path.exists(itinerary_file):
+                logger.error(f"Itinerary file not found: {itinerary_file}")
+                return False
+            
+            # Load current itinerary
+            with open(itinerary_file, 'r') as f:
+                itinerary_data = json.load(f)
+            
+            # Find and remove matching events
+            original_count = len(itinerary_data["events"])
+            event_name_lower = event_name.lower()
+            
+            itinerary_data["events"] = [
+                event for event in itinerary_data["events"]
+                if not (
+                    (event.get("title") and event_name_lower in event["title"].lower()) or
+                    (event.get("location", {}).get("name") and event_name_lower in event["location"]["name"].lower()) or
+                    (event.get("description") and event_name_lower in event["description"].lower())
+                )
+            ]
+            
+            removed_count = original_count - len(itinerary_data["events"])
+            
+            if removed_count > 0:
+                itinerary_data["updated_at"] = datetime.now().isoformat()
+                
+                # Save back to file
+                with open(itinerary_file, 'w') as f:
+                    json.dump(itinerary_data, f, indent=2)
+                
+                logger.info(f"Successfully removed {removed_count} event(s) matching '{event_name}' from trip {trip_id}")
+                return True
+            else:
+                logger.info(f"No events found matching '{event_name}' in trip {trip_id}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Failed to remove event from trip {trip_id}: {e}")
+            return False
+
+    def create_event_in_trip(self, trip_id: str, event_data: Dict[str, Any]) -> bool:
+        """
+        Create an actual event in the trip JSON file.
+        
+        Args:
+            trip_id: ID of the trip
+            event_data: Event information extracted from query
+            
+        Returns:
+            bool: True if event was created successfully
+        """
+        try:
+            
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            itinerary_file = os.path.join(project_root, 'data', f'itinerary_{trip_id}.json')
+            
+            if not os.path.exists(itinerary_file):
+                logger.error(f"Itinerary file not found: {itinerary_file}")
+                return False
+            
+            # Load current itinerary
+            with open(itinerary_file, 'r') as f:
+                itinerary_data = json.load(f)
+            
+            # Use trip dates for context
+            trip_start = itinerary_data.get("start_date")
+            trip_end = itinerary_data.get("end_date")
+            
+            # Generate new event
+            new_event = {
+                "id": str(uuid.uuid4())[:8],
+                "title": event_data.get("title", "New Event"),
+                "event_type": event_data.get("event_type", "other"),
+                "start_datetime": self._parse_datetime(event_data.get("date"), event_data.get("time"), trip_start),
+                "end_datetime": self._parse_datetime(event_data.get("date"), event_data.get("time"), trip_start, add_hour=True),
+                "location": {
+                    "name": event_data.get("location", "TBD"),
+                    "address": None,
+                    "city": None,
+                    "country": None,
+                    "latitude": None,
+                    "longitude": None,
+                    "timezone": None,
+                    "notes": None
+                },
+                "description": event_data.get("description", ""),
+                "contacts": [],
+                "cost": event_data.get("cost", 0.0),
+                "currency": "USD",
+                "priority": "medium",
+                "attendees": [],
+                "confirmation_number": None,
+                "notes": None,
+                "metadata": {},
+                "created_at": datetime.now().isoformat(),
+                "updated_at": datetime.now().isoformat()
+            }
+            
+            # Add event to itinerary
+            itinerary_data["events"].append(new_event)
+            itinerary_data["updated_at"] = datetime.now().isoformat()
+            
+            # Save back to file
+            with open(itinerary_file, 'w') as f:
+                json.dump(itinerary_data, f, indent=2)
+            
+            logger.info(f"Successfully created event '{new_event['title']}' in trip {trip_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to create event in trip {trip_id}: {e}")
+            return False
     
+    def _parse_datetime(self, date_str: str, time_str: str, trip_start_date: str = None, add_hour: bool = False) -> str:
+        """Parse date and time strings into ISO datetime format."""
+        try:
+            
+            # Default to trip start date if no date provided
+            if not date_str:
+                if trip_start_date:
+                    base_date = datetime.strptime(trip_start_date, '%Y-%m-%d').date()
+                else:
+                    base_date = datetime.now().date()
+            else:
+                # Try to parse various date formats
+                if re.match(r'\d{4}-\d{2}-\d{2}', date_str):
+                    base_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                else:
+                    # Fallback to today
+                    base_date = datetime.now().date()
+            
+            # Default to 12:00 if no time provided
+            if not time_str:
+                time_obj = datetime.strptime("12:00", "%H:%M").time()
+            else:
+                # Try to parse time - this is simplified
+                if "pm" in time_str.lower():
+                    hour_match = re.search(r'(\d{1,2})', time_str)
+                    if hour_match:
+                        hour = int(hour_match.group(1))
+                        if hour != 12:
+                            hour += 12
+                        time_obj = datetime.strptime(f"{hour}:00", "%H:%M").time()
+                    else:
+                        time_obj = datetime.strptime("12:00", "%H:%M").time()
+                else:
+                    time_obj = datetime.strptime("12:00", "%H:%M").time()
+            
+            result_datetime = datetime.combine(base_date, time_obj)
+            if add_hour:
+                result_datetime += timedelta(hours=1)
+                
+            return result_datetime.isoformat()
+            
+        except Exception as e:
+            logger.error(f"Error parsing datetime: {e}")
+            # Fallback to current time
+            result = datetime.now()
+            if add_hour:
+                result += timedelta(hours=1)
+            return result.isoformat()
+
+    def create_event_in_trip_ai(self, trip_id: str, event_data: Dict[str, Any]) -> bool:
+        """
+        Create an event in the trip JSON file using AI-generated data.
+        
+        Args:
+            trip_id: ID of the trip
+            event_data: Complete event data from AI
+            
+        Returns:
+            bool: True if event was created successfully
+        """
+        try:
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            itinerary_file = os.path.join(project_root, 'data', f'itinerary_{trip_id}.json')
+            
+            if not os.path.exists(itinerary_file):
+                logger.error(f"Itinerary file not found: {itinerary_file}")
+                return False
+            
+            # Load current itinerary
+            with open(itinerary_file, 'r') as f:
+                itinerary_data = json.load(f)
+            
+            # Generate new event using AI data
+            # Handle location data - ensure all required fields are present
+            location_data = event_data.get("location", {})
+            full_location = {
+                "name": location_data.get("name", "TBD"),
+                "address": location_data.get("address", "TBD"),
+                "city": location_data.get("city", "TBD"),
+                "country": location_data.get("country", "USA"),
+                "latitude": location_data.get("latitude"),
+                "longitude": location_data.get("longitude"),
+                "timezone": location_data.get("timezone"),
+                "notes": location_data.get("notes")
+            }
+            
+            new_event = {
+                "id": str(uuid.uuid4())[:8],
+                "title": event_data.get("title", "New Event"),
+                "event_type": event_data.get("event_type", "other"),
+                "start_datetime": event_data.get("start_datetime"),
+                "end_datetime": event_data.get("end_datetime"),
+                "location": full_location,
+                "description": event_data.get("description", ""),
+                "contacts": [],
+                "cost": event_data.get("cost", 0.0),
+                "currency": "USD",
+                "priority": event_data.get("priority", "medium"),
+                "attendees": [],
+                "confirmation_number": event_data.get("confirmation_number"),
+                "notes": None,
+                "metadata": {},
+                "created_at": datetime.now().isoformat(),
+                "updated_at": datetime.now().isoformat()
+            }
+            
+            # Add event to itinerary
+            itinerary_data["events"].append(new_event)
+            itinerary_data["updated_at"] = datetime.now().isoformat()
+            
+            # Save back to file
+            with open(itinerary_file, 'w') as f:
+                json.dump(itinerary_data, f, indent=2)
+            
+            logger.info(f"AI successfully created event '{new_event['title']}' in trip {trip_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to create AI event in trip {trip_id}: {e}")
+            return False

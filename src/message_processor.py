@@ -116,16 +116,48 @@ def process_message_and_get_reply(trip_id: str, query: str, sender: str, message
             logger.error(f"Chatbot engine returned None for message_id: {message_id}")
             return "I'm sorry, I was unable to generate a response. Please try rephrasing your message."
 
-        # 5. Store facts in ChromaDB if necessary
-        if not response.is_pure_question and response.facts_summary:
-            collection.add(
-                ids=[message_id],
-                documents=[response.facts_summary],
-                metadatas=[{'sender': sender, 'timestamp': datetime.now().isoformat()}]
-            )
-            logger.info(f"Stored facts from message {message_id} in ChromaDB.")
+        # 5. Execute AI-determined itinerary actions
+        if hasattr(response, 'itinerary_actions') and response.itinerary_actions:
+            for action in response.itinerary_actions:
+                if action.action_type == "add_event" and action.event_data:
+                    # Convert Pydantic model to dict for the create function
+                    event_dict = action.event_data.dict() if hasattr(action.event_data, 'dict') else action.event_data
+                    if hasattr(event_dict.get('location'), 'dict'):
+                        event_dict['location'] = event_dict['location'].dict()
+                    
+                    success = chatbot_engine.create_event_in_trip_ai(trip_id, event_dict)
+                    if success:
+                        logger.info(f"AI successfully added event '{event_dict.get('title', 'Unknown')}' - Reasoning: {action.reasoning}")
+                    else:
+                        logger.warning(f"AI failed to add event: {action.reasoning}")
+                        
+                elif action.action_type == "remove_event" and action.removal_criteria:
+                    success = chatbot_engine.remove_event_from_trip(trip_id, action.removal_criteria)
+                    if success:
+                        logger.info(f"AI successfully removed event matching '{action.removal_criteria}' - Reasoning: {action.reasoning}")
+                    else:
+                        logger.warning(f"AI failed to remove event: {action.reasoning}")
+                        
+                elif action.action_type == "modify_event":
+                    logger.info(f"AI requested event modification - Reasoning: {action.reasoning}")
+                    # TODO: Implement event modification logic
+        
+        # 6. Store facts in ChromaDB if necessary  
+        if hasattr(response, 'is_pure_question') and hasattr(response, 'facts_summary'):
+            if not response.is_pure_question and response.facts_summary:
+                collection.add(
+                    ids=[message_id],
+                    documents=[response.facts_summary],
+                    metadatas=[{'sender': sender, 'timestamp': datetime.now().isoformat()}]
+                )
+                logger.info(f"Stored facts from message {message_id} in ChromaDB.")
             
-        return response.query_response
+        # Return the appropriate response
+        if hasattr(response, 'query_response'):
+            return response.query_response
+        else:
+            # Fallback for string responses
+            return str(response)
 
     except Exception as e:
         logger.error(f"Error in message processor for trip {trip_id}: {e}", exc_info=True)

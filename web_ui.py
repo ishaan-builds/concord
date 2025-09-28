@@ -11,6 +11,7 @@ import logging
 import re
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from flask_cors import CORS
 import chromadb
 
 # Add project root to path to import our modules
@@ -30,6 +31,9 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'dev-secret-key-change-in-production')
+
+# Configure CORS to allow requests from samplewebsite.xyz
+CORS(app, origins=['https://samplewebsite.xyz', 'http://samplewebsite.xyz'])
 
 # Initialize clients and storage
 chroma_client = chromadb.HttpClient(host='localhost', port=8001)
@@ -228,7 +232,21 @@ def trip_detail(trip_id):
         flash('Trip not found.', 'error')
         return redirect(url_for('index'))
     
-    return render_template('trip_detail.html', trip=trip)
+    # Load itinerary data if it exists
+    itinerary = None
+    if 'itinerary_file' in trip:
+        try:
+            from src.itinerary_models import TripItinerary
+            import os
+            if os.path.exists(trip['itinerary_file']):
+                with open(trip['itinerary_file'], 'r') as f:
+                    itinerary = TripItinerary.from_json(f.read())
+            else:
+                logger.warning(f"Itinerary file not found: {trip['itinerary_file']}")
+        except Exception as e:
+            logger.warning(f"Could not load itinerary for trip {trip_id}: {e}")
+    
+    return render_template('trip_detail.html', trip=trip, itinerary=itinerary)
 
 @app.route('/trip/<trip_id>/chatbot', methods=['POST'])
 def chatbot(trip_id):
@@ -305,41 +323,82 @@ def get_conversations(trip_id):
         logger.error(f"Error getting conversations: {e}", exc_info=True)
         return jsonify({'error': 'Could not retrieve conversations.'}), 500
 
+
+
+@app.route('/trip/<trip_id>/refresh_calendar', methods=['POST'])
+def refresh_calendar(trip_id):
+    """Refresh and sync calendar data."""
+    try:
+        trip = TRIPS_STORE.get(trip_id)
+        if not trip:
+            return jsonify({'success': False, 'error': 'Trip not found'})
+        
+        # If itinerary file exists, reload and validate the data
+        if 'itinerary_file' in trip:
+            from src.itinerary_models import TripItinerary
+            import os
+            
+            if os.path.exists(trip['itinerary_file']):
+                with open(trip['itinerary_file'], 'r') as f:
+                    itinerary = TripItinerary.from_json(f.read())
+                
+                # Re-save to ensure data consistency
+                with open(trip['itinerary_file'], 'w') as f:
+                    f.write(itinerary.to_json())
+                
+                logger.info(f"Refreshed calendar data for trip {trip_id}")
+                return jsonify({'success': True, 'message': 'Calendar refreshed successfully'})
+            else:
+                return jsonify({'success': False, 'error': 'Itinerary file not found'})
+        else:
+            # No itinerary file yet, just return success
+            return jsonify({'success': True, 'message': 'Calendar data synchronized'})
+    
+    except Exception as e:
+        logger.error(f"Error refreshing calendar: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)})
+
 @app.route('/trip/<trip_id>/delete', methods=['POST'])
 def delete_trip(trip_id):
-    """Delete a trip and its associated resources."""
-    trip = TRIPS_STORE.get(trip_id)
-    if not trip:
+    """Delete a trip and its associated data."""
+    if trip_id not in TRIPS_STORE:
         flash('Trip not found.', 'error')
         return redirect(url_for('index'))
+    
+    trip = TRIPS_STORE[trip_id]
     
     try:
         settings = get_settings()
         agentmail_client = AgentMailClient(api_key=settings.agentmail.api_key)
         
-        try:
-            agentmail_client.webhooks.delete(trip['webhook_id'])
-            logger.info(f"Deleted webhook {trip['webhook_id']}")
-        except Exception as e:
-            logger.warning(f"Could not delete webhook {trip['webhook_id']}: {e}")
+        # Delete webhook
+        if 'webhook_id' in trip:
+            try:
+                agentmail_client.webhooks.delete(trip['webhook_id'])
+            except Exception as e:
+                logger.warning(f"Could not delete webhook {trip['webhook_id']}: {e}")
         
-        try:
-            agentmail_client.inboxes.delete(trip['inbox_id'])
-            logger.info(f"Deleted inbox {trip['inbox_id']}")
-        except Exception as e:
-            logger.warning(f"Could not delete inbox {trip['inbox_id']}: {e}")
+        # Delete inbox (if needed - check AgentMail API documentation)
+        # Note: You might want to keep the inbox for record keeping
         
-        if os.path.exists(trip['itinerary_file']):
-            os.remove(trip['itinerary_file'])
-        
+        # Remove from local storage
         del TRIPS_STORE[trip_id]
         save_trips_to_file()
         
-        flash(f'Trip "{trip["name"]}" deleted successfully.', 'success')
+        # Clean up itinerary file
+        if 'itinerary_file' in trip:
+            try:
+                import os
+                if os.path.exists(trip['itinerary_file']):
+                    os.remove(trip['itinerary_file'])
+            except Exception as e:
+                logger.warning(f"Could not delete itinerary file: {e}")
+        
+        flash('Trip deleted successfully.', 'success')
         
     except Exception as e:
-        logger.error(f"Error deleting trip {trip_id}: {e}", exc_info=True)
-        flash('An unexpected error occurred while deleting the trip.', 'error')
+        logger.error(f"Error deleting trip: {e}", exc_info=True)
+        flash('An error occurred while deleting the trip.', 'error')
     
     return redirect(url_for('index'))
 

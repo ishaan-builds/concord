@@ -1,29 +1,11 @@
 {
-  "849b3abd": {
-    "id": "849b3abd",
-    "name": "Jungle Journey",
-    "inbox_id": "jungle-journey@agentmail.to",
-    "inbox_email": "jungle-journey@agentmail.to",
-    "webhook_id": "c6d2fe55-d7e0-445a-a80c-81d13fff0d6f",
-    "itinerary_file": "/Users/chabeck/Developer/personal/concord/data/itinerary_849b3abd.json",
-    "created_at": "2025-09-28T04:52:06.867135"
-  },
-  "a91c204e": {
-    "id": "a91c204e",
-    "name": "Hawaii Adventure",
-    "inbox_id": "hawaii-adventure1@agentmail.to",
-    "inbox_email": "hawaii-adventure1@agentmail.to@agentmail.to",
-    "webhook_id": "2045113c-967d-4215-9a89-0c630087a63f",
-    "itinerary_file": "/Users/chabeck/Developer/personal/concord/data/itinerary_a91c204e.json",
-    "created_at": "2025-09-28T07:02:17.436798"
-  },
-  "f59367be": {
-    "id": "f59367be",
-    "name": "Sand Dunes",
-    "inbox_id": "sand-dunes@agentmail.to",
-    "inbox_email": "sand-dunes@agentmail.to",
-    "webhook_id": "b110582b-30e6-4b17-bd4e-eaafacdbb3ca",
-    "itinerary_file": "/Users/chabeck/Developer/personal/concord/data/itinerary_f59367be.json",
-    "created_at": "2025-09-28T07:07:00.556518"
+  "19683136": {
+    "id": "19683136",
+    "name": "Florida '25",
+    "inbox_id": "florida-255@agentmail.to",
+    "inbox_email": "florida-255@agentmail.to",
+    "webhook_id": "5246929f-bea2-442c-a109-922e508b9a58",
+    "itinerary_file": "/Users/chabeck/Developer/personal/concord/data/itinerary_19683136.json",
+    "created_at": "2025-09-28T11:23:47.799959"
   }
 }

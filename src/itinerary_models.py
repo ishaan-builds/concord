@@ -153,7 +153,17 @@ class TripItinerary:
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert itinerary to dictionary."""
-        return asdict(self)
+        data = asdict(self)
+        
+        # Convert enums to their values for proper JSON serialization
+        if 'events' in data:
+            for event in data['events']:
+                if 'event_type' in event and hasattr(event['event_type'], 'value'):
+                    event['event_type'] = event['event_type'].value
+                if 'priority' in event and hasattr(event['priority'], 'value'):
+                    event['priority'] = event['priority'].value
+        
+        return data
     
     def to_json(self) -> str:
         """Convert itinerary to JSON string."""
@@ -184,9 +194,17 @@ class TripItinerary:
                 
                 # Convert enums
                 if 'event_type' in event_data:
-                    event_data['event_type'] = EventType(event_data['event_type'])
+                    event_type_str = event_data['event_type']
+                    # Handle both "EventType.FLIGHT" and "flight" formats
+                    if event_type_str.startswith('EventType.'):
+                        event_type_str = event_type_str.split('.')[1].lower()
+                    event_data['event_type'] = EventType(event_type_str)
                 if 'priority' in event_data:
-                    event_data['priority'] = Priority(event_data['priority'])
+                    priority_str = event_data['priority']
+                    # Handle both "Priority.MEDIUM" and "medium" formats
+                    if priority_str.startswith('Priority.'):
+                        priority_str = priority_str.split('.')[1].lower()
+                    event_data['priority'] = Priority(priority_str)
                 
                 # Convert location
                 if 'location' in event_data and event_data['location']:

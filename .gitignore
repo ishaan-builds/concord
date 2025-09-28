@@ -1,2 +1,7 @@
 /venv/
 /logs/
+/config/
+/data/
+/db/
+logs/
+ngrok
