@@ -2,10 +2,13 @@ import logging
 import json
 from datetime import datetime
 import chromadb
+import re
 
 from .config import get_settings
 from .chatbot_engine import ChatbotEngine
 from .itinerary_models import TripItinerary
+from agentmail import Thread
+from quotequail import quote
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +24,30 @@ chatbot_engine = ChatbotEngine(
     temperature=settings.ai.temperature
 )
 
+def get_thread_history(thread: Thread) -> str:
+    """
+    Extracts and concatenates the text from all messages in a thread.
+    
+    Args:
+        thread: The Thread object containing messages.
+        
+    Returns:
+        A single string with all message texts concatenated.
+    """
+    messages_text = []
+    for msg in thread.messages[:-1]:
+        text = msg.text
+        quote_result = quote(text)
+        reply_lines = [reply_line for is_quote, reply_line in quote_result if is_quote]
+        messages_text.append('\n'.join(reply_lines).strip())
+    
+    history = ""
+    for i, msg in enumerate(messages_text):
+        history += f"{messages_text[i]}\n"
 
-def process_message_and_get_reply(trip_id: str, query: str, sender: str, message_id: str) -> str:
+    return history
+
+def process_message_and_get_reply(trip_id: str, query: str, sender: str, message_id: str, session_history: Thread | list[str]) -> str:
     """
     The central logic for processing any message, from email or UI.
     
@@ -53,13 +78,23 @@ def process_message_and_get_reply(trip_id: str, query: str, sender: str, message
         collection = chroma_client.get_or_create_collection(trip_id)
         
         # 3. Generate AI response
-        response = chatbot_engine.generate_response(
-            query=query,
-            itinerary_id=trip_id,
-            collection=collection,
-            sender_email=sender
-        )
-        
+        if(isinstance(session_history, Thread)):
+            response = chatbot_engine.generate_response(
+                query=query,
+                history=get_thread_history(session_history),
+                itinerary_id=trip_id,
+                collection=collection,
+                sender_email=sender
+            )
+        else:
+            response = chatbot_engine.generate_response(
+                query=query,
+                history="\n".join(session_history),
+                itinerary_id=trip_id,
+                collection=collection,
+                sender_email=sender
+            )
+            
         # 4. Handle potential empty AI response (Graceful fallback)
         if not response:
             logger.error(f"Chatbot engine returned None for message_id: {message_id}")

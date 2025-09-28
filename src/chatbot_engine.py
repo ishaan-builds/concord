@@ -234,8 +234,8 @@ class ChatbotEngine:
         
         return "general", extracted_data
     
-    def generate_response(self, query: str, itinerary_id: str,
-                            collection: Collection, message_history: List[Message] = None,
+    def generate_response(self, query: str, history: str, itinerary_id: str,
+                            collection: Collection, 
                             sender_email: str = None) -> EmailAnalysis:
         """
         Generate AI response to user query.
@@ -255,9 +255,7 @@ class ChatbotEngine:
             
             # Get message history context
             msg_context = ""
-            if message_history:
-                msg_context += self.get_message_history_context(message_history)
-            elif collection: 
+            if collection: 
                 query_results = collection.query(
                     query_texts=[query],
                     n_results=10
@@ -298,19 +296,11 @@ class ChatbotEngine:
             - "My flight is delayed to 8pm" → Store: "User's flight delayed to 8pm"
             - "I booked an Uber for 7am" → Store: "Uber booked for 7am pickup"
             
-            ## What Facts to Store:
-            - Dietary restrictions/preferences/allergies
-            - Schedule/booking/timing changes
-            - Transportation arrangements  
-            - Budget updates
-            - Contact information updates
-            - Personal constraints or availability
-            - Any concrete trip information that others should know
-            
             ## Important:
             - If a message has BOTH questions and facts, classify as "contains facts" and extract only the factual parts
             - Focus on information that would be useful for trip coordination
             - Keep fact summaries concise and clear
+            - Group members are confirmed participants unless stated otherwise
             
             ## Response Guidelines:
             - Always provide a helpful response to any questions
@@ -325,6 +315,9 @@ class ChatbotEngine:
                 "facts_summary": "Summary of factual information to store (empty string if pure question)",
                 "query_response": "Your helpful response to the user"
             }}
+
+            ## Earlier Chat History(from least to most recent):
+            {history if history else "None"}
             
             ## Current Context:
             Trip Information: {itinerary_context} \n {msg_context if msg_context else "None"}
@@ -336,7 +329,7 @@ class ChatbotEngine:
             # Generate response using the configured AI provider
             if self.ai_provider == "google":
                 # Use Google AI (Gemini)
-                prompt = f"{system_prompt}\n\nUser: {query}\nAssistant:"
+                prompt = f"{system_prompt}\n\nUser {sender_email}: {query}\nAssistant:"
                 
                 # Log what we're sending to Gemini
                 logger.info(f"=== SENDING TO GEMINI ===")

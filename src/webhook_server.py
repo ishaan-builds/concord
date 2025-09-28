@@ -1,19 +1,13 @@
-"""
-FastAPI webhook server for handling AgentMail events and processing messages.
-"""
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 import logging
 import json
+import re
 from typing import Dict, Any
-from datetime import datetime
 from quotequail import quote
-import chromadb
 
 from .agentmail_client import AgentMailClient
-from .chatbot_engine import ChatbotEngine
-from .itinerary_models import TripItinerary
+from .message_processor import process_message_and_get_reply  # <-- New Import
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -21,13 +15,9 @@ logger = logging.getLogger(__name__)
 class WebhookServer:
     """FastAPI-based webhook server for AgentMail events."""
     
-    def __init__(self, agentmail_client: AgentMailClient, chatbot_engine: ChatbotEngine,
-                 default_itinerary_id: str):
+    def __init__(self, agentmail_client: AgentMailClient, **kwargs): # Removed unused args
         self.app = FastAPI(title="AgentMail Chatbot Webhook Server")
         self.agentmail_client = agentmail_client
-        self.chatbot_engine = chatbot_engine
-        self.default_itinerary_id = default_itinerary_id
-        self.chroma_client = chromadb.HttpClient(host='localhost', port=8001)
         self._setup_routes()
     
     def _setup_routes(self):
@@ -42,149 +32,71 @@ class WebhookServer:
             """Handle incoming webhook events for a specific trip."""
             try:
                 payload_data = await request.json()
-                logger.info(f"Received webhook for trip: {trip_id}")
-                logger.info(f"Parsed webhook JSON for trip {trip_id}")
-                
                 event_type = payload_data.get("event_type")
                 
                 if event_type == "message.received":
-                    # --- FIX #1: Get data from the "message" key, not "data" ---
-                    message_data = payload_data.get("message") or {}
-                    
-                    if not message_data:
-                        logger.error(f"Webhook for trip {trip_id} did not contain a 'message' object.")
-                        return {"status": "error", "message": "Missing message object"}
-                        
-                    background_tasks.add_task(
-                        self._process_trip_message,
-                        trip_id,
-                        message_data
-                    )
-                    return {"status": "accepted", "message": f"Message queued for processing for trip {trip_id}"}
-                
+                    message_data = payload_data.get("message", {})
+                    if message_data:
+                        background_tasks.add_task(self._process_email, trip_id, message_data)
+                    return {"status": "accepted"}
                 else:
-                    logger.warning(f"Unhandled event type for trip {trip_id}: {event_type}")
-                    return {"status": "ignored", "reason": "Unhandled event type"}
+                    return {"status": "ignored"}
                     
             except Exception as e:
-                logger.error(f"Error processing webhook for trip {trip_id}: {e}", exc_info=True)
+                logger.error(f"Error in webhook handler for trip {trip_id}: {e}", exc_info=True)
                 raise HTTPException(status_code=500, detail=str(e))
     
-    async def _process_trip_message(self, trip_id: str, message_data: Dict[str, Any]):
-        """Process an incoming message for a specific trip."""
+    async def _process_email(self, trip_id: str, message_data: Dict[str, Any]):
+        """Parses an email and delegates to the central message processor."""
         try:
-            # --- FIX #2: Use the correct keys from the raw webhook payload ---
-            message_id = message_data.get("message_id")
-            thread_id = message_data.get("thread_id")
-            sender_raw = message_data.get("from") or message_data.get("from_")
+            # 1. Check if message is for the correct inbox for this trip
+            with open("data/trips.json", 'r') as f:
+                trip_data = json.load(f).get(trip_id, {})
             
-            # Extract email from "Name <email>" format
-            sender = sender_raw.split("<")[1].split(">")[0] if sender_raw and "<" in sender_raw else sender_raw
-            
-            if not sender:
-                logger.error(f"No sender found in message data for trip {trip_id}: {message_data}")
-                return
-            
-            recipient_raw = message_data.get("to", [])
-            recipient = recipient_raw[0] if recipient_raw else ""
-            subject = message_data.get("subject", "")
-            raw_body = message_data.get("text", "") # Use "text" for the plain text body
             inbox_id = message_data.get("inbox_id")
-
-            # Load trip data from file
-            trips_file = "data/trips.json"
-            with open(trips_file, 'r') as f:
-                trip_data = json.load(f).get(trip_id)
-
-            if not trip_data:
-                logger.error(f"Trip {trip_id} not found in trips.json")
+            if inbox_id != trip_data.get("inbox_id"):
+                logger.info(f"Skipping message: inbox '{inbox_id}' does not match trip '{trip_id}' inbox.")
                 return
 
-            # Check if this message is for the correct inbox
-            expected_inbox_id = trip_data['inbox_id']
-            if inbox_id != expected_inbox_id:
-                logger.info(f"Skipping message for trip {trip_id}: inbox_id '{inbox_id}' doesn't match expected '{expected_inbox_id}'")
+            # 2. Extract key info from the email payload
+            sender_raw = message_data.get("from")
+            sender = sender_raw.split('<')[1].split('>')[0].strip() if sender_raw and '<' in sender_raw else sender_raw
+            message_id = message_data.get("message_id")
+
+            if not sender or not message_id:
+                logger.error("Message missing sender or message_id.")
                 return
             
-            # Skip bot's own messages to prevent loops
-            if self._is_bot_message(sender):
-                logger.info(f"Skipping bot's own message for trip {trip_id}")
-                return
-
-            # Use quotequail to extract only the new message content
-            # query = quote(raw_body)[1][1].strip() if raw_body else ""
+            # 3. Clean the email body to get just the new text
             raw_body = message_data.get("text", "")
+            pattern = r'^On\s+(.+?),\s+(.+?)\s+wrote:\s*$'
             if raw_body:
-                # quote() returns a list of tuples: (is_quote, text)
-                # We want the text where is_quote is True (meaning it's new content)
                 quote_result = quote(raw_body)
                 new_content_parts = [text for is_quote, text in quote_result if is_quote]
                 query = '\n'.join(new_content_parts).strip()
+                query = re.sub(pattern, "", query, flags=re.MULTILINE | re.DOTALL)
             else:
                 query = ""
 
             if not query:
-                logger.info(f"Message body for {message_data.get('message_id')} was empty after cleaning. Skipping.")
+                logger.info(f"Message {message_id} had no new text. Skipping.")
                 return
             
-            # if not query:
-            #     logger.info(f"Message body for {message_id} was empty after cleaning. Skipping.")
-            #     return
+            thread = self.agentmail_client.threads.get(thread_id=message_data.get("thread_id"))
 
-            logger.info(f"Processing message for trip {trip_id} from {sender} with query: '{query}'")
-
-            # Load itinerary for context
-            with open(trip_data['itinerary_file'], 'r') as f:
-                itinerary = TripItinerary.from_json(f.read())
+            # 4. Delegate all the core logic to the central processor
+            ai_reply_text = process_message_and_get_reply(trip_id, query, sender, message_id, thread=thread)
             
-            self.chatbot_engine.set_itinerary(itinerary)
-            
-            collection = self.chroma_client.get_or_create_collection(trip_id)
-
-            # print("Threads:\n" + str(self.agentmail_client.threads.get(thread_id=thread_id)))  # Verify thread exists
-
-            # Generate AI response
-            response = self.chatbot_engine.generate_response(
-                query=query,
-                itinerary_id=trip_id,
-                collection=collection,
-                sender_email=sender
-            )
-            
-            ai_response = response.query_response
-            
-            if not response.is_pure_question and response.facts_summary:
-                collection.add(
-                    ids=[message_id],
-                    documents=[response.facts_summary],
-                    metadatas=[{'sender': sender, 'subject': subject, 'timestamp': datetime.now().isoformat()}]
-                )
-                logger.info(f"Stored facts from message {message_id} in ChromaDB")
-            
-            # Send reply using the AgentMail SDK
-            sent_message = self.agentmail_client.inboxes.messages.reply(
+            # 5. Send the reply via AgentMail
+            self.agentmail_client.inboxes.messages.reply(
                 inbox_id=inbox_id,
                 message_id=message_id,
-                text=ai_response,
-                html=f"<p>{ai_response.replace('\n', '<br>')}</p>" # Send a simple HTML version
+                text=ai_reply_text
             )
-            
-            logger.info(f"Sent response message {sent_message.message_id} to {sender} for trip {trip_id}")
-            
-        except Exception as e:
-            logger.error(f"Error processing message for trip {trip_id}: {e}", exc_info=True)
-    
-    def _is_bot_message(self, sender: str) -> bool:
-        """Check if a message is from one of the bot's inboxes."""
-        try:
-            inboxes = self.agentmail_client.inboxes.list()
-            bot_addresses = [inbox.email_address for inbox in inboxes]
-            return sender in bot_addresses
-        except Exception as e:
-            logger.warning(f"Could not check bot addresses: {e}")
-            return False
+            logger.info(f"Sent AI reply to {sender} for trip {trip_id}")
 
-def create_webhook_server(agentmail_client: AgentMailClient, 
-                         chatbot_engine: ChatbotEngine,
-                         default_itinerary_id: str) -> WebhookServer:
-    return WebhookServer(agentmail_client, chatbot_engine, default_itinerary_id)
+        except Exception as e:
+            logger.error(f"Error processing email for trip {trip_id}: {e}", exc_info=True)
+
+def create_webhook_server(agentmail_client: AgentMailClient, **kwargs) -> WebhookServer:
+    return WebhookServer(agentmail_client=agentmail_client)

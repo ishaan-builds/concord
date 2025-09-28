@@ -1,177 +1,189 @@
 {% extends "base.html" %}
 
-{% block title %}AgentMail Trip Creator - Home{% endblock %}
+{% block title %}Concord - AI Trip Coordination{% endblock %}
 
 {% block content %}
-<div class="hero-section">
-    <div class="container">
-        <div class="row align-items-center">
-            <div class="col-lg-6">
-                <h1 class="display-4 fw-bold mb-4">Create AI Trip Assistants</h1>
-                <p class="lead mb-4">
-                    Generate smart email inboxes that automatically help coordinate group trips. 
-                    Get instant responses about itineraries, budgets, locations, and more!
-                </p>
-                <a href="{{ url_for('create_form') }}" class="btn btn-primary btn-lg">
-                    <i class="fas fa-plus me-2"></i>Create New Trip
-                </a>
-            </div>
-            <div class="col-lg-6 text-center">
-                <i class="fas fa-robot" style="font-size: 8rem; opacity: 0.8;"></i>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="container my-5">
-    <!-- Features Section -->
-    <div class="row mb-5">
-        <div class="col-12 text-center mb-4">
-            <h2>How It Works</h2>
-            <p class="text-muted">Three simple steps to get your AI trip assistant running</p>
-        </div>
-        <div class="col-md-4 text-center">
-            <i class="fas fa-wpforms feature-icon"></i>
-            <h4>1. Fill Out Trip Details</h4>
-            <p class="text-muted">Enter your trip information, dates, budget, and participants</p>
-        </div>
-        <div class="col-md-4 text-center">
-            <i class="fas fa-envelope-open feature-icon"></i>
-            <h4>2. Get Your Email Address</h4>
-            <p class="text-muted">Receive a unique AgentMail inbox for your trip coordination</p>
-        </div>
-        <div class="col-md-4 text-center">
-            <i class="fas fa-comments feature-icon"></i>
-            <h4>3. Start Chatting</h4>
-            <p class="text-muted">Share the email with your group and let the AI handle questions</p>
-        </div>
-    </div>
-
-    <!-- Existing Trips Section -->
-    {% if trips %}
-    <div class="row">
-        <div class="col-12">
-            <h2 class="mb-4">
-                <i class="fas fa-suitcase-rolling me-2"></i>
-                Your Trips ({{ trips|length }})
-            </h2>
-        </div>
+<section class="hero">
+    <!-- Floating Particles -->
+    <div class="floating-particles">
+        <div class="particle" style="--delay: 0s; --duration: 20s; left: 10%; top: 20%;"></div>
+        <div class="particle" style="--delay: 2s; --duration: 25s; left: 80%; top: 10%;"></div>
+        <div class="particle" style="--delay: 4s; --duration: 18s; left: 20%; top: 80%;"></div>
+        <div class="particle" style="--delay: 6s; --duration: 22s; left: 90%; top: 70%;"></div>
+        <div class="particle" style="--delay: 8s; --duration: 24s; left: 60%; top: 30%;"></div>
     </div>
     
-    <div class="row">
-        {% for trip_id, trip in trips.items() %}
-        <div class="col-lg-6 col-xl-4">
-            <div class="card trip-card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="card-title mb-0">{{ trip.name }}</h5>
-                    <span class="badge bg-success status-badge">Active</span>
+    <div class="container">
+        <h1 class="hero-title">
+            The Email Provider<br>
+            <span class="gradient-text">for AI Trip Coordinators</span>
+        </h1>
+        <p class="hero-subtitle">
+            Deploy AI assistants that coordinate group travel through email. Each trip gets its own intelligent coordinator that answers questions, shares updates, and keeps everyone in sync.
+        </p>
+        <div class="hero-cta">
+            <a href="{{ url_for('create_form') }}" class="btn btn-primary btn-lg pulse-button">
+                <i class="fas fa-rocket"></i>
+                Deploy Your First Coordinator
+            </a>
+            {% if trips %}
+            <a href="#assistants" class="btn btn-secondary btn-lg">
+                <i class="fas fa-satellite-dish"></i>
+                View Active Coordinators
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+{% if not trips %}
+<section style="padding: 4rem 0;">
+    <div class="container">
+        <div class="text-center mb-8">
+            <h2 class="text-3xl font-bold mb-4 gradient-text">Powerful Features</h2>
+            <p class="text-secondary text-lg">Everything you need to coordinate group travel seamlessly</p>
+        </div>
+        <div class="feature-grid fade-in-stagger">
+            <div class="feature-card glow-on-hover">
+                <div class="feature-icon">
+                    <i class="fas fa-envelope"></i>
                 </div>
+                <h3 class="feature-title">Email-Based Communication</h3>
+                <p class="feature-description">
+                    Your AI assistant gets its own email address. Group members can ask questions naturally via email.
+                </p>
+            </div>
+            <div class="feature-card glow-on-hover">
+                <div class="feature-icon">
+                    <i class="fas fa-brain"></i>
+                </div>
+                <h3 class="feature-title">Intelligent Responses</h3>
+                <p class="feature-description">
+                    Powered by advanced AI, your assistant understands context and provides helpful, accurate information.
+                </p>
+            </div>
+            <div class="feature-card glow-on-hover">
+                <div class="feature-icon">
+                    <i class="fas fa-sync"></i>
+                </div>
+                <h3 class="feature-title">Always in Sync</h3>
+                <p class="feature-description">
+                    Keep everyone updated with real-time information sharing and automatic coordination.
+                </p>
+            </div>
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{% if trips %}
+<section id="assistants" style="padding: 4rem 0;">
+    <div class="container">
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h2 class="text-3xl font-bold mb-2">Active AI Assistants</h2>
+                <p class="text-secondary">Manage your deployed trip coordinators</p>
+            </div>
+            <a href="{{ url_for('create_form') }}" class="btn btn-primary">
+                <i class="fas fa-plus"></i>
+                New Assistant
+            </a>
+        </div>
+        
+        <div class="feature-grid fade-in-stagger">
+            {% for trip_id, trip in trips.items() %}
+            <div class="card glow-on-hover" style="animation-delay: {{ loop.index0 * 0.1 }}s;">
                 <div class="card-body">
-                    <p class="text-muted mb-2">
-                        <i class="fas fa-map-marker-alt me-1"></i>{{ trip.destination or 'No destination set' }}
-                    </p>
-                    <p class="text-muted mb-2">
-                        <i class="fas fa-calendar me-1"></i>{{ trip.start_date }} to {{ trip.end_date }}
-                    </p>
-                    <p class="text-muted mb-2">
-                        <i class="fas fa-users me-1"></i>{{ (trip.participants|length) + 1 }} participants
-                    </p>
-                    {% if trip.budget_total > 0 %}
-                    <p class="text-muted mb-3">
-                        <i class="fas fa-dollar-sign me-1"></i>${{ "%.2f"|format(trip.budget_total) }} total
-                    </p>
-                    {% endif %}
-                    
-                    <div class="mb-3">
-                        <small class="text-muted">Email Address:</small>
-                        <div class="input-group input-group-sm">
-                            <input type="text" class="form-control" value="{{ trip.inbox_email }}" readonly>
-                            <button class="btn btn-outline-secondary" onclick="copyToClipboard('{{ trip.inbox_email }}')">
-                                <i class="fas fa-copy"></i>
-                            </button>
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="feature-icon floating-icon" style="margin: 0; width: 40px; height: 40px; animation-delay: {{ loop.index0 * 0.5 }}s;">
+                            <i class="fas fa-satellite-dish"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-semibold mb-1">{{ trip.name }}</h3>
+                            <div class="badge badge-success">
+                                <i class="fas fa-circle" style="font-size: 6px;"></i>
+                                Active
+                            </div>
                         </div>
                     </div>
-                </div>
-                <div class="card-footer">
-                    <div class="btn-group w-100" role="group">
-                        <a href="{{ url_for('trip_detail', trip_id=trip_id) }}" class="btn btn-primary btn-sm">
-                            <i class="fas fa-eye me-1"></i>View
+                    
+                    <div class="form-group">
+                        <label class="form-label text-xs">Assistant Email</label>
+                        <div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: var(--radius-md); font-family: monospace; font-size: 0.8rem; color: var(--text-secondary); word-break: break-all; border: 1px solid var(--border-light); transition: all 0.3s ease;">
+                            {{ trip.inbox_email }}
+                        </div>
+                    </div>
+                    
+                    <div class="flex gap-2" style="margin-top: 1.5rem;">
+                        <a href="{{ url_for('trip_detail', trip_id=trip_id) }}" class="btn btn-primary" style="flex: 1;">
+                            <i class="fas fa-cog"></i>
+                            Dashboard
                         </a>
-                        <button class="btn btn-outline-danger btn-sm" onclick="deleteTrip('{{ trip_id }}', '{{ trip.name }}')">
-                            <i class="fas fa-trash me-1"></i>Delete
+                        <button class="btn btn-secondary copy-btn" onclick="copyEmail('{{ trip.inbox_email }}')" title="Copy Email">
+                            <i class="fas fa-copy"></i>
                         </button>
                     </div>
                 </div>
             </div>
-        </div>
-        {% endfor %}
-    </div>
-    {% else %}
-    <div class="row">
-        <div class="col-12 text-center">
-            <div class="card border-0 bg-light">
-                <div class="card-body py-5">
-                    <i class="fas fa-suitcase" style="font-size: 4rem; color: #ccc; margin-bottom: 2rem;"></i>
-                    <h3>No Trips Yet</h3>
-                    <p class="text-muted mb-4">Create your first AI-powered trip coordinator to get started!</p>
-                    <a href="{{ url_for('create_form') }}" class="btn btn-primary">
-                        <i class="fas fa-plus me-2"></i>Create Your First Trip
-                    </a>
-                </div>
-            </div>
+            {% endfor %}
         </div>
     </div>
-    {% endif %}
-</div>
+</section>
+{% endif %}
 
-<!-- Delete confirmation modal -->
-<div class="modal fade" id="deleteModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Confirm Delete</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <p>Are you sure you want to delete the trip "<span id="deleteTripName"></span>"?</p>
-                <p class="text-muted">This will remove the trip, its inbox, and all associated data. This action cannot be undone.</p>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <form id="deleteForm" method="POST" style="display: inline;">
-                    <button type="submit" class="btn btn-danger">
-                        <i class="fas fa-trash me-1"></i>Delete Trip
-                    </button>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
-{% endblock %}
-
-{% block extra_js %}
 <script>
-function copyToClipboard(text) {
-    navigator.clipboard.writeText(text).then(function() {
-        // Show toast or alert
-        const toast = document.createElement('div');
-        toast.className = 'alert alert-success position-fixed';
-        toast.style.top = '20px';
-        toast.style.right = '20px';
-        toast.style.zIndex = '9999';
-        toast.innerHTML = '<i class="fas fa-check me-2"></i>Email address copied!';
-        document.body.appendChild(toast);
+function copyEmail(email) {
+    navigator.clipboard.writeText(email).then(() => {
+        const button = event.target.closest('button');
+        const originalIcon = button.innerHTML;
+        
+        // Add copied animation
+        button.classList.add('copied');
+        button.innerHTML = '<i class="fas fa-check"></i>';
+        
+        // Create a ripple effect
+        const ripple = document.createElement('div');
+        ripple.style.cssText = `
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.6);
+            transform: scale(0);
+            animation: ripple 0.6s linear;
+            left: 50%;
+            top: 50%;
+            width: 20px;
+            height: 20px;
+            margin-left: -10px;
+            margin-top: -10px;
+        `;
+        
+        const rippleKeyframes = `
+            @keyframes ripple {
+                to {
+                    transform: scale(4);
+                    opacity: 0;
+                }
+            }
+        `;
+        
+        if (!document.querySelector('#ripple-styles')) {
+            const style = document.createElement('style');
+            style.id = 'ripple-styles';
+            style.textContent = rippleKeyframes;
+            document.head.appendChild(style);
+        }
+        
+        button.appendChild(ripple);
         
         setTimeout(() => {
-            document.body.removeChild(toast);
+            button.innerHTML = originalIcon;
+            button.classList.remove('copied');
+            if (ripple.parentNode) {
+                ripple.parentNode.removeChild(ripple);
+            }
         }, 2000);
+    }).catch(err => {
+        console.error('Failed to copy email: ', err);
     });
 }
-
-function deleteTrip(tripId, tripName) {
-    document.getElementById('deleteTripName').textContent = tripName;
-    document.getElementById('deleteForm').action = `/trip/${tripId}/delete`;
-    new bootstrap.Modal(document.getElementById('deleteModal')).show();
-}
-</script>
-{% endblock %}
+</script>\n{% endblock %}
