@@ -1,0 +1,1038 @@
+<!-- @ts-nocheck -->
+<!-- This is a Jinja2 template file with embedded JavaScript - IDE errors are expected -->
+{% extends "base.html" %}
+
+{% block title %}{{ trip.name }} - Trip Details{% endblock %}
+
+{% block head %}
+{{ super() }}
+<!-- FullCalendar CSS -->
+<link href='https://unpkg.com/fullcalendar@6.1.10/main.min.css' rel='stylesheet' />
+<!-- FullCalendar JS -->
+<script src='https://unpkg.com/fullcalendar@6.1.10/main.min.js'></script>
+{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 1200px; padding: 2rem 1rem;">
+    <!-- Trip Header -->
+    <div class="flex items-center gap-4 mb-6">
+        <div class="feature-icon" style="margin: 0; width: 48px; height: 48px;">
+            <i class="fas fa-satellite-dish"></i>
+        </div>
+        <div>
+            <h1 class="text-3xl font-bold mb-1">{{ trip.name }}</h1>
+            <div class="flex items-center gap-2">
+                <div class="badge badge-success">
+                    <i class="fas fa-circle" style="font-size: 6px;"></i>
+                    Active
+                </div>
+                {% if trip.destination %}
+                <span class="text-secondary">• {{ trip.destination }}</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Calendar Section -->
+    {% if itinerary %}
+        {% if itinerary.events and itinerary.events|length > 0 %}
+        <div class="card mb-6">
+            <div class="card-header">
+                <div class="flex items-center gap-3">
+                    <div class="feature-icon" style="margin: 0; width: 32px; height: 32px; background: var(--green-600); color: white;">
+                        <i class="fas fa-calendar-alt"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold mb-0">Trip Calendar</h3>
+                        <p class="text-sm text-secondary mb-0">{{ itinerary.events|length }} event{{ 's' if itinerary.events|length != 1 else '' }} planned</p>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body" style="padding: 1.5rem;">
+                <div id="calendar" style="max-width: 100%;"></div>
+                <!-- Hidden events data for JavaScript -->
+                <script type="application/json" id="events-data">
+                {% if itinerary and itinerary.events %}
+                [
+                {% for event in itinerary.events %}
+                {
+                    "id": "{{ event.id }}",
+                    "title": "{{ event.title|e }}",
+                    "start": "{{ event.start_datetime.isoformat() }}",
+                    {% if event.end_datetime %}"end": "{{ event.end_datetime.isoformat() }}",{% endif %}
+                    "type": "{{ event.event_type.value }}",
+                    "description": "{{ event.description|e if event.description else '' }}",
+                    "location": "{{ event.location.name|e if event.location else '' }}",
+                    "priority": "{{ event.priority.value }}",
+                    "cost": {{ event.cost if event.cost else 'null' }},
+                    "currency": "{{ event.currency }}",
+                    "confirmationNumber": "{{ event.confirmation_number|e if event.confirmation_number else '' }}"
+                }{% if not loop.last %},{% endif %}
+                {% endfor %}
+                ]
+                {% else %}
+                []
+                {% endif %}
+                </script>
+            </div>
+        </div>
+        {% else %}
+        <div class="card mb-6">
+            <div class="card-header">
+                <div class="flex items-center gap-3">
+                    <div class="feature-icon" style="margin: 0; width: 32px; height: 32px; background: var(--gray-500); color: white;">
+                        <i class="fas fa-calendar-alt"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold mb-0">Trip Calendar</h3>
+                        <p class="text-sm text-secondary mb-0">No events scheduled yet</p>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body" style="padding: 1.5rem;">
+                <div style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                    <i class="fas fa-calendar-plus" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.3;"></i>
+                    <p style="margin: 0; font-size: 1.1rem;">Start planning your trip by asking your AI assistant to add events!</p>
+                    <p style="margin: 0.5rem 0 1.5rem 0; font-size: 0.9rem;">Try saying: "Add a flight from NYC to Paris on December 15th"</p>
+                    <button type="button" id="refreshCalendarBtn" class="btn btn-secondary" onclick="refreshCalendar()">
+                        <i class="fas fa-sync-alt"></i> Refresh Calendar
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    {% endif %}
+
+    <div style="display: grid; grid-template-columns: 1fr 320px; gap: 2rem; align-items: start;">
+        <!-- Chat Interface -->
+        <div class="card">
+            <div class="card-header">
+                <div class="flex items-center gap-2">
+                    <div class="feature-icon" style="margin: 0; margin-right: 1rem; width: 32px; height: 32px; background: var(--blue-600); color: white;">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold mb-0">AI Trip Assistant</h3>
+                        <p class="text-sm text-secondary mb-0">Ready to help with your trip</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="height: 500px; overflow-y: auto; padding: 1.5rem; background: var(--bg-primary);" id="chatContainer">
+                <div class="chat-message-ai">
+                    <div class="feature-icon" style="margin: 0; width: 32px; height: 32px; background: #4f46e5; color: white; flex-shrink: 0;">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <div class="chat-bubble-ai ai-response" style="background: #f1f5f9 !important; border: 1px solid #e2e8f0 !important;">
+                        <p style="margin: 0; color: #333 !important;">Hello! I'm your AI assistant for <strong>{{ trip.name }}</strong>. I can help answer questions about your trip, provide recommendations, and keep everyone coordinated. What would you like to know?</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card-footer">
+                <div style="display: flex; gap: 0.75rem; align-items: end;">
+                    <textarea id="chatInput" 
+                              class="form-control" 
+                              placeholder="Ask me anything about your trip..." 
+                              rows="1" 
+                              style="flex: 1; resize: none; min-height: 44px; max-height: 120px;"></textarea>
+                    <button class="btn btn-primary" onclick="sendMessage()" id="sendButton" style="height: 44px; width: 44px; padding: 0; display: flex; align-items: center; justify-content: center;">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+            <!-- Email Card -->
+            <div class="card">
+                <div class="card-body">
+                    <h3 class="text-lg font-semibold mb-3">
+                        <i class="fas fa-envelope text-blue-600" style="margin-right: 0.5rem;"></i>
+                        Assistant Email
+                    </h3>
+                    <p class="text-sm text-secondary mb-3">Share this email with your group. Anyone can ask questions by sending an email to this address.</p>
+                    <div style="background: var(--bg-secondary); padding: 0.75rem; border-radius: var(--radius-md); font-family: monospace; font-size: 0.875rem; color: var(--text-secondary); word-break: break-all; border: 1px solid var(--border-light); margin-bottom: 1rem;">
+                        {{ trip.inbox_email }}
+                    </div>
+                    <button class="btn btn-secondary w-full" onclick="copyToClipboard('{{ trip.inbox_email }}')" id="copyBtn">
+                        <i class="fas fa-copy"></i>
+                        Copy Email
+                    </button>
+                </div>
+            </div>
+
+            <!-- Trip Details -->
+            <div class="card">
+                <div class="card-body">
+                    <h3 class="text-lg font-semibold mb-3">
+                        <i class="fas fa-info-circle text-blue-600" style="margin-right: 0.5rem;"></i>
+                        Trip Details
+                    </h3>
+                    <div class="form-group">
+                        <label class="form-label text-xs">Trip ID</label>
+                        <div style="font-family: monospace; font-size: 0.75rem; color: var(--text-secondary); background: var(--bg-secondary); padding: 0.5rem; border-radius: var(--radius-sm); border: 1px solid var(--border-light);">
+                            {{ trip.id }}
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label text-xs">Created</label>
+                        <p class="text-sm mb-0">{{ trip.created_at[:10] if trip.created_at else 'Recently' }}</p>
+                    </div>
+                    {% if trip.description %}
+                    <div class="form-group">
+                        <label class="form-label text-xs">Description</label>
+                        <p class="text-sm mb-0">{{ trip.description }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Danger Zone -->
+            <div class="card" style="border-color: var(--red-200); margin-top: 2rem;">
+                <div class="card-body">
+                    <h3 class="text-lg font-semibold mb-3" style="color: var(--red-600);">
+                        <i class="fas fa-exclamation-triangle" style="margin-right: 0.5rem;"></i>
+                        Danger Zone
+                    </h3>
+                    <p class="text-sm text-secondary mb-5">This will permanently delete the assistant and all associated data. This action cannot be undone.</p>
+                    <form action="{{ url_for('delete_trip', trip_id=trip.id) }}" method="POST">
+                        <button type="submit" class="btn btn-danger w-full" onclick="return confirm('Are you sure you want to permanently delete this assistant? This action cannot be undone.')">
+                            <i class="fas fa-trash"></i>
+                            Delete Assistant
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Chat-specific styles */
+.chat-message-user {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    justify-content: flex-end;
+}
+
+.chat-message-ai {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.chat-bubble-user {
+    background: #3b82f6;
+    color: white;
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-lg);
+    max-width: 70%;
+}
+
+.chat-bubble-ai {
+    background: #f1f5f9 !important;
+    border: 1px solid #e2e8f0 !important;
+    padding: 0.75rem 1rem;
+    border-radius: 12px;
+    flex: 1;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.chat-bubble-ai p {
+    margin: 0 !important;
+    color: #1f2937 !important;
+}
+
+.chat-bubble-ai strong {
+    color: #111827 !important;
+    font-weight: 600 !important;
+}
+
+.chat-bubble-ai .ai-response {
+    background: transparent !important;
+}
+
+.chat-bubble-ai .ai-response * {
+    color: #1f2937 !important;
+}
+
+.chat-bubble-ai .ai-response strong {
+    color: #111827 !important;
+    font-weight: 600 !important;
+}
+
+.typing-indicator {
+    display: flex;
+    gap: 0.25rem;
+    padding: 0.75rem 1rem;
+}
+
+.typing-dot {
+    width: 6px;
+    height: 6px;
+    background: var(--gray-400);
+    border-radius: 50%;
+    animation: typing 1.4s infinite;
+}
+
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typing {
+    0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+    30% { opacity: 1; transform: translateY(-4px); }
+}
+
+/* Auto-resize textarea */
+#chatInput {
+    overflow: hidden;
+}
+</style>
+
+<script>
+// Chat history management
+let chatHistory = [];
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function sendMessage() {
+    const input = document.getElementById('chatInput');
+    const sendButton = document.getElementById('sendButton');
+    const query = input.value.trim();
+    if (!query) return;
+
+    const chatContainer = document.getElementById('chatContainer');
+    
+    // Add user message
+    const userMessageHtml = `
+        <div class="chat-message-user">
+            <div class="feature-icon" style="margin: 0; width: 32px; height: 32px; background: var(--gray-600); color: white; flex-shrink: 0;">
+                <i class="fas fa-user"></i>
+            </div>
+            <div class="chat-bubble-user">
+                <p style="margin: 0;">${escapeHtml(query)}</p>
+            </div>
+        </div>
+    `;
+    chatContainer.insertAdjacentHTML('beforeend', userMessageHtml);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+    input.value = '';
+
+    // Show AI typing indicator
+    const typingIndicatorHtml = `
+        <div class="chat-message-ai" id="typing-indicator">
+            <div class="feature-icon" style="margin: 0; width: 32px; height: 32px; background: var(--blue-600); color: white; flex-shrink: 0;">
+                <i class="fas fa-robot"></i>
+            </div>
+            <div class="chat-bubble-ai">
+                <div class="typing-indicator">
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                </div>
+            </div>
+        </div>
+    `;
+    chatContainer.insertAdjacentHTML('beforeend', typingIndicatorHtml);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+    
+    // Disable input and show loading state
+    sendButton.disabled = true;
+    sendButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    input.disabled = true;
+
+    // Send to backend with chat history
+    console.log('Sending chat history:', chatHistory);
+    console.log('Chat history length:', chatHistory.length);
+    
+    fetch('/trip/{{ trip.id }}/chatbot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            query: query,
+            history: chatHistory 
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('Received response:', data);
+        // Update chat history with the new conversation
+        if (data.history) {
+            console.log('Updating chat history from:', chatHistory.length, 'to:', data.history.length);
+            chatHistory = data.history;
+        }
+        
+        const aiMessageHtml = `
+            <div class="chat-message-ai">
+                <div class="feature-icon" style="margin: 0; width: 32px; height: 32px; background: #4f46e5; color: white; flex-shrink: 0;">
+                    <i class="fas fa-robot"></i>
+                </div>
+                <div class="chat-bubble-ai ai-response" style="background: #f1f5f9 !important; border: 1px solid #e2e8f0 !important; padding: 0.75rem 1rem; border-radius: 12px; color: #333 !important;">
+                    ${data.response || '<p style="margin: 0; color: #dc3545 !important;">Error: No response from server.</p>'}
+                </div>
+            </div>
+        `;
+        document.getElementById('typing-indicator').remove();
+        chatContainer.insertAdjacentHTML('beforeend', aiMessageHtml);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    })
+    .catch(error => {
+        const errorMessageHtml = `
+            <div class="chat-message-ai">
+                <div class="feature-icon" style="margin: 0; width: 32px; height: 32px; background: #dc3545; color: white; flex-shrink: 0;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <div class="chat-bubble-ai" style="background: #f1f5f9 !important; border: 1px solid #e2e8f0 !important; padding: 0.75rem 1rem; border-radius: 12px;">
+                    <p style="margin: 0; color: #dc3545 !important;">Connection error. Please try again.</p>
+                </div>
+            </div>
+        `;
+        document.getElementById('typing-indicator').remove();
+        chatContainer.insertAdjacentHTML('beforeend', errorMessageHtml);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    })
+    .finally(() => {
+        sendButton.disabled = false;
+        sendButton.innerHTML = '<i class="fas fa-paper-plane"></i>';
+        input.disabled = false;
+        input.focus();
+    });
+}
+
+// Auto-resize textarea
+document.getElementById('chatInput').addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+});
+
+// Handle Enter key
+document.getElementById('chatInput').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+    }
+});
+
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(function() {
+        const copyBtn = document.getElementById('copyBtn');
+        const originalText = copyBtn.innerHTML;
+        copyBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+        copyBtn.classList.add('btn-success');
+        copyBtn.classList.remove('btn-secondary');
+        
+        setTimeout(() => {
+            copyBtn.innerHTML = originalText;
+            copyBtn.classList.remove('btn-success');
+            copyBtn.classList.add('btn-secondary');
+        }, 2000);
+    }).catch(function(err) {
+        console.error('Failed to copy: ', err);
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        
+        const copyBtn = document.getElementById('copyBtn');
+        const originalText = copyBtn.innerHTML;
+        copyBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+        copyBtn.classList.add('btn-success');
+        copyBtn.classList.remove('btn-secondary');
+        
+        setTimeout(() => {
+            copyBtn.innerHTML = originalText;
+            copyBtn.classList.remove('btn-success');
+            copyBtn.classList.add('btn-secondary');
+        }, 2000);
+    });
+}
+
+function refreshCalendar() {
+    const btn = document.getElementById('refreshCalendarBtn');
+    const originalText = btn.innerHTML;
+    
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refreshing...';
+    
+    fetch('/trip/{{ trip.id }}/refresh_calendar', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Reload the page to show the refreshed calendar
+            window.location.reload();
+        } else {
+            throw new Error(data.error || 'Unknown error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        btn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Error';
+        setTimeout(() => {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }, 3000);
+    });
+}
+
+// Initialize calendar with events data
+function initializeEventCalendar() {
+    const calendarEl = document.getElementById('calendar');
+    
+    if (!calendarEl) {
+        return;
+    }
+    
+    // Get events data from hidden script tag
+    const eventsDataEl = document.getElementById('events-data');
+    if (!eventsDataEl) {
+        return;
+    }
+    
+    let eventsData;
+    try {
+        eventsData = JSON.parse(eventsDataEl.textContent);
+    } catch (e) {
+        return;
+    }
+    
+    if (!eventsData || !eventsData.length) {
+        return;
+    }
+    
+    // Check if FullCalendar is loaded
+    if (typeof FullCalendar === 'undefined') {
+        // FullCalendar library not available, use fallback event list
+        createFallbackEventList(calendarEl, eventsData);
+        return;
+    }
+    
+    // Convert events for FullCalendar
+    const events = eventsData.map(event => ({
+        id: event.id,
+        title: event.title,
+        start: event.start,
+        end: event.end,
+        backgroundColor: getEventColor(event.type),
+        borderColor: getEventColor(event.type),
+        textColor: '#ffffff',
+        extendedProps: {
+            type: event.type,
+            description: event.description,
+            location: event.location,
+            priority: event.priority,
+            cost: event.cost,
+            currency: event.currency,
+            confirmationNumber: event.confirmationNumber
+        }
+    }));
+    
+    const calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
+        },
+        events: events,
+        eventClick: function(info) {
+            showEventModal(info.event);
+        },
+        eventDidMount: function(info) {
+            // Add event type as data attribute for CSS styling
+            if (info.event.extendedProps.type) {
+                info.el.setAttribute('data-event-type', info.event.extendedProps.type);
+            }
+        },
+        height: 'auto',
+        firstDay: 1,
+        eventDisplay: 'block',
+        dayMaxEvents: 3,
+        moreLinkClick: 'popover'
+    });
+    
+    calendar.render();
+}
+
+// Fallback function to create a simple event list when FullCalendar fails to load
+function createFallbackEventList(containerEl, events) {
+    if (!events || !events.length) {
+        return;
+    }
+    
+    // Clear the container
+    containerEl.innerHTML = '';
+    
+    // Create a simple event list
+    const eventList = document.createElement('div');
+    eventList.style.cssText = 'max-height: 600px; overflow-y: auto; padding: 1rem;';
+    
+    events.forEach(event => {
+        const eventDiv = document.createElement('div');
+        eventDiv.style.cssText = `
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-left: 4px solid ${getEventColor(event.type)};
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        `;
+        
+        const startDate = new Date(event.start);
+        const endDate = event.end ? new Date(event.end) : null;
+        const timeStr = startDate.toLocaleString() + (endDate ? ' - ' + endDate.toLocaleString() : '');
+        
+        eventDiv.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                <div style="width: 12px; height: 12px; border-radius: 50%; background: ${getEventColor(event.type)};"></div>
+                <strong style="font-size: 1.1rem; color: #ffffff;">${event.title}</strong>
+                <span style="background: linear-gradient(135deg, ${getEventColor(event.type)}, ${getEventColor(event.type)}dd); color: white; padding: 0.2rem 0.5rem; border-radius: 6px; font-size: 0.75rem; text-transform: uppercase; font-weight: 500;">
+                    ${event.type}
+                </span>
+            </div>
+            <div style="color: rgba(255, 255, 255, 0.6); margin-bottom: 0.5rem;">📅 ${timeStr}</div>
+            ${event.location ? `<div style="color: rgba(255, 255, 255, 0.6); margin-bottom: 0.5rem;">📍 ${event.location}</div>` : ''}
+            ${event.description ? `<div style="margin-bottom: 0.5rem; color: rgba(255, 255, 255, 0.8);">${event.description}</div>` : ''}
+            ${event.cost ? `<div style="color: #10b981; font-weight: 600;">💰 ${event.cost} ${event.currency}</div>` : ''}
+            ${event.confirmationNumber ? `<div style="color: rgba(255, 255, 255, 0.6); font-size: 0.9rem;">Confirmation: ${event.confirmationNumber}</div>` : ''}
+        `;
+        
+        eventList.appendChild(eventDiv);
+    });
+    
+    containerEl.appendChild(eventList);
+}
+
+
+
+// Get color for different event types
+function getEventColor(eventType) {
+    const colors = {
+        'flight': '#3b82f6',      // primary blue
+        'hotel': '#10b981',       // success green  
+        'restaurant': '#f59e0b',  // amber
+        'activity': '#8b5cf6',    // violet
+        'transport': '#6b7280',   // gray
+        'meeting': '#ef4444',     // red
+        'free_time': '#06b6d4',   // cyan
+        'other': '#64748b'        // slate gray
+    };
+    return colors[eventType] || colors['other'];
+}
+
+// Show event details in modal
+function showEventModal(event) {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">
+                    <i class="fas fa-${getEventIcon(event.extendedProps.type)}" style="color: ${getEventColor(event.extendedProps.type)}; margin-right: 0.5rem;"></i>
+                    ${event.title}
+                </h3>
+                <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="event-details">
+                    <div class="detail-item">
+                        <strong>Time:</strong>
+                        <span>${formatEventTime(event.start, event.end)}</span>
+                    </div>
+                    ${event.extendedProps.location ? `
+                    <div class="detail-item">
+                        <strong>Location:</strong>
+                        <span>${event.extendedProps.location}</span>
+                    </div>
+                    ` : ''}
+                    ${event.extendedProps.description ? `
+                    <div class="detail-item">
+                        <strong>Description:</strong>
+                        <span>${event.extendedProps.description}</span>
+                    </div>
+                    ` : ''}
+                    <div class="detail-item">
+                        <strong>Type:</strong>
+                        <span class="event-type-badge" style="background-color: ${getEventColor(event.extendedProps.type)};">
+                            ${event.extendedProps.type.replace('_', ' ').toUpperCase()}
+                        </span>
+                    </div>
+                    ${event.extendedProps.cost ? `
+                    <div class="detail-item">
+                        <strong>Cost:</strong>
+                        <span>${event.extendedProps.cost} ${event.extendedProps.currency}</span>
+                    </div>
+                    ` : ''}
+                    ${event.extendedProps.confirmationNumber ? `
+                    <div class="detail-item">
+                        <strong>Confirmation:</strong>
+                        <span class="confirmation-number">${event.extendedProps.confirmationNumber}</span>
+                    </div>
+                    ` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+}
+
+// Get icon for different event types
+function getEventIcon(eventType) {
+    const icons = {
+        'flight': 'plane',
+        'hotel': 'bed',
+        'restaurant': 'utensils',
+        'activity': 'hiking',
+        'transport': 'car',
+        'meeting': 'users',
+        'free_time': 'clock',
+        'other': 'calendar'
+    };
+    return icons[eventType] || icons['other'];
+}
+
+// Format event time for display
+function formatEventTime(start, end) {
+    const startDate = new Date(start);
+    const startStr = startDate.toLocaleDateString() + ' ' + startDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    
+    if (end) {
+        const endDate = new Date(end);
+        const endStr = endDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        
+        // If same day, just show end time
+        if (startDate.toDateString() === endDate.toDateString()) {
+            return `${startStr} - ${endStr}`;
+        } else {
+            return `${startStr} - ${endDate.toLocaleDateString()} ${endStr}`;
+        }
+    }
+    
+    return startStr;
+}
+
+// Initialize calendar when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+    initializeEventCalendar();
+});
+</script>
+
+<style>
+/* Modal styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 12px;
+    max-width: 500px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.modal-title {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #111827;
+    display: flex;
+    align-items: center;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.25rem;
+    color: #6b7280;
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.modal-close:hover {
+    background: #f3f4f6;
+    color: #374151;
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+.event-details {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.detail-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.detail-item strong {
+    color: #374151;
+    font-weight: 600;
+    font-size: 0.875rem;
+}
+
+.detail-item span {
+    color: #6b7280;
+}
+
+.event-type-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    width: fit-content;
+}
+
+.confirmation-number {
+    font-family: monospace;
+    background: #f3f4f6;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    color: #374151;
+    width: fit-content;
+}
+
+/* Calendar customizations
+.fc {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Calendar header styling */
+.fc-header-toolbar {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
+    border: 1px solid var(--border-light, rgba(255, 255, 255, 0.1));
+    border-radius: 12px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+}
+
+.fc-toolbar-title {
+    color: var(--text-primary, #ffffff) !important;
+    font-weight: 600;
+    font-size: 1.25rem;
+}
+
+.fc-button-primary {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
+    border: 1px solid #3b82f6 !important;
+    color: white !important;
+    border-radius: 8px !important;
+    font-weight: 500;
+    padding: 0.5rem 1rem;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
+}
+
+.fc-button-primary:hover {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+    border-color: #2563eb !important;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 24px rgba(59, 130, 246, 0.4);
+}
+
+.fc-button-primary:focus {
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3) !important;
+}
+
+.fc-button-primary:disabled {
+    background: rgba(255, 255, 255, 0.1) !important;
+    border-color: var(--border-light, rgba(255, 255, 255, 0.1)) !important;
+    color: var(--text-tertiary, rgba(255, 255, 255, 0.6)) !important;
+    transform: none;
+    box-shadow: none;
+}
+
+/* Calendar background */
+.fc-view-harness {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+    border: 1px solid var(--border-light, rgba(255, 255, 255, 0.1));
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+/* Day headers */
+.fc-col-header {
+    background: var(--bg-tertiary, #334155);
+    border-bottom: 1px solid var(--border-primary, rgba(255, 255, 255, 0.2));
+}
+
+.fc-col-header-cell {
+    background: transparent;
+    border-right: 1px solid var(--border-light, rgba(255, 255, 255, 0.1));
+}
+
+.fc-col-header-cell-cushion {
+    color: var(--text-primary, #ffffff);
+    font-weight: 600;
+    font-size: 0.875rem;
+    padding: 0.75rem 0.5rem;
+}
+
+/* Calendar days */
+.fc-daygrid-day {
+    background: transparent;
+    border-right: 1px solid var(--border-light, rgba(255, 255, 255, 0.05));
+    border-bottom: 1px solid var(--border-light, rgba(255, 255, 255, 0.05));
+}
+
+.fc-daygrid-day:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.fc-daygrid-day-number {
+    color: var(--text-secondary, rgba(255, 255, 255, 0.8));
+    font-weight: 500;
+    padding: 0.5rem;
+}
+
+.fc-day-today {
+    background: rgba(59, 130, 246, 0.1) !important;
+}
+
+.fc-day-today .fc-daygrid-day-number {
+    color: var(--primary-400, #38bdf8);
+    font-weight: 600;
+}
+
+/* Events styling */
+.fc-event {
+    cursor: pointer;
+    border: none !important;
+    border-radius: 6px !important;
+    font-size: 0.75rem;
+    font-weight: 500;
+    margin: 1px;
+    padding: 2px 6px;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.fc-event:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+/* Event colors by type */
+.fc-event[data-event-type="flight"] {
+    background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+    color: white !important;
+}
+
+.fc-event[data-event-type="hotel"] {
+    background: linear-gradient(135deg, #10b981, #059669) !important;
+    color: white !important;
+}
+
+.fc-event[data-event-type="restaurant"] {
+    background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+    color: white !important;
+}
+
+.fc-event[data-event-type="activity"] {
+    background: linear-gradient(135deg, #8b5cf6, #7c3aed) !important;
+    color: white !important;
+}
+
+.fc-event[data-event-type="transport"] {
+    background: linear-gradient(135deg, #6b7280, #4b5563) !important;
+    color: white !important;
+}
+
+.fc-event[data-event-type="meeting"] {
+    background: linear-gradient(135deg, #ef4444, #dc2626) !important;
+    color: white !important;
+}
+
+.fc-event[data-event-type="free_time"] {
+    background: linear-gradient(135deg, #06b6d4, #0891b2) !important;
+    color: white !important;
+}
+
+.fc-event[data-event-type="other"] {
+    background: linear-gradient(135deg, #64748b, #475569) !important;
+    color: white !important;
+}
+
+.fc-daygrid-event {
+    font-size: 0.75rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.fc-daygrid-event-dot {
+    display: none;
+}
+
+/* List view styling */
+.fc-list-event:hover td {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.fc-list-day-cushion {
+    background: var(--bg-tertiary, #334155);
+    color: var(--text-primary, #ffffff);
+    font-weight: 600;
+}
+
+.fc-list-event-title {
+    color: var(--text-secondary, rgba(255, 255, 255, 0.8));
+}
+
+.fc-list-event-time {
+    color: var(--text-tertiary, rgba(255, 255, 255, 0.6));
+}
+</style>
+{% endblock %}

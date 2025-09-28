@@ -1,0 +1,8 @@
+/venv/
+/logs/
+/config/
+/data/
+/db/
+logs/
+config/.env
+ngrok

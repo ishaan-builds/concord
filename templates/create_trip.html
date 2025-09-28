@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+
+{% block title %}Create New Trip - Concord{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 600px; margin: 0 auto; padding: 2rem 1rem;">
+    <div class="card">
+        <div class="card-body">
+            <div class="text-center mb-6">
+                <div class="feature-icon" style="margin: 0 auto 1rem;">
+                    <i class="fas fa-rocket"></i>
+                </div>
+                <h1 class="text-2xl font-bold mb-2">Deploy AI Assistant</h1>
+                <p class="text-secondary">Set up your intelligent trip coordinator in seconds</p>
+            </div>
+            
+            <form id="create-trip-form" method="POST" novalidate>
+                <div class="form-group">
+                    <label for="trip_name" class="form-label required">Trip Name</label>
+                    <input type="text" 
+                           class="form-control form-control-lg" 
+                           id="trip_name" 
+                           name="trip_name" 
+                           placeholder="e.g., Hawaii Adventure 2024"
+                           required>
+                    <div class="form-error"></div>
+                    <p class="form-help">Give your trip a memorable name that your group will recognize</p>
+                </div>
+                
+                <div class="form-group">
+                    <label for="destination" class="form-label">Destination</label>
+                    <input type="text" 
+                           class="form-control form-control-lg" 
+                           id="destination" 
+                           name="destination" 
+                           placeholder="e.g., Maui, Hawaii">
+                    <p class="form-help">Optional: helps the AI provide location-specific recommendations</p>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label for="start_date" class="form-label required">Start Date</label>
+                        <input type="date" 
+                               class="form-control" 
+                               id="start_date" 
+                               name="start_date" 
+                               required>
+                        <div class="form-error"></div>
+                    </div>
+                    <div class="form-group">
+                        <label for="end_date" class="form-label required">End Date</label>
+                        <input type="date" 
+                               class="form-control" 
+                               id="end_date" 
+                               name="end_date" 
+                               required>
+                        <div class="form-error"></div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="organizer_name" class="form-label required">Organizer Name</label>
+                    <input type="text" 
+                           class="form-control" 
+                           id="organizer_name" 
+                           name="organizer_name" 
+                           placeholder="Your name" 
+                           required>
+                    <div class="form-error"></div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="organizer_email" class="form-label required">Organizer Email</label>
+                    <input type="email" 
+                           class="form-control" 
+                           id="organizer_email" 
+                           name="organizer_email" 
+                           placeholder="your.email@example.com" 
+                           required>
+                    <div class="form-error"></div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="trip_description" class="form-label">Trip Details</label>
+                    <textarea class="form-control" 
+                              id="trip_description" 
+                              name="trip_description" 
+                              rows="4" 
+                              placeholder="Share details about your trip plans, activities, or any specific information the AI should know..."></textarea>
+                    <p class="form-help">Optional: provide context to help your AI assistant give better responses</p>
+                </div>
+                
+                <div style="display: flex; gap: 0.75rem; margin-top: 2rem;">
+                    <button type="submit" class="btn btn-primary btn-lg" style="flex: 1;">
+                        <span class="btn-text">
+                            <i class="fas fa-rocket"></i>
+                            Deploy Assistant
+                        </span>
+                        <span class="loading-spinner" style="display: none;">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            Creating...
+                        </span>
+                    </button>
+                </div>
+                
+                <div class="text-center" style="margin-top: 1rem;">
+                    <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i>
+                        Back to Dashboard
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div class="text-center" style="margin-top: 2rem; padding: 1rem;">
+        <p class="text-xs text-secondary">
+            <i class="fas fa-shield-alt" style="margin-right: 0.25rem;"></i>
+            Your AI assistant will get a unique email address that you can share with your group
+        </p>
+    </div>
+</div>
+
+<script>
+document.getElementById('create-trip-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const form = this;
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const btnText = submitBtn.querySelector('.btn-text');
+    const loadingSpinner = submitBtn.querySelector('.loading-spinner');
+    
+    // Show loading state
+    submitBtn.disabled = true;
+    btnText.style.display = 'none';
+    loadingSpinner.style.display = 'inline-flex';
+    
+    // Clear previous validation
+    form.querySelectorAll('.form-control.error').forEach(el => el.classList.remove('error'));
+    form.querySelectorAll('.form-error').forEach(el => el.textContent = '');
+    
+    // Validate form
+    let isValid = true;
+    const tripName = form.querySelector('#trip_name');
+    const startDate = form.querySelector('#start_date');
+    const endDate = form.querySelector('#end_date');
+    const organizerName = form.querySelector('#organizer_name');
+    const organizerEmail = form.querySelector('#organizer_email');
+    
+    if (!tripName.value.trim()) {
+        tripName.classList.add('error');
+        tripName.parentElement.querySelector('.form-error').textContent = 'Trip name is required';
+        isValid = false;
+    }
+    
+    if (!startDate.value) {
+        startDate.classList.add('error');
+        startDate.parentElement.querySelector('.form-error').textContent = 'Start date is required';
+        isValid = false;
+    }
+    
+    if (!endDate.value) {
+        endDate.classList.add('error');
+        endDate.parentElement.querySelector('.form-error').textContent = 'End date is required';
+        isValid = false;
+    }
+    
+    if (!organizerName.value.trim()) {
+        organizerName.classList.add('error');
+        organizerName.parentElement.querySelector('.form-error').textContent = 'Organizer name is required';
+        isValid = false;
+    }
+    
+    if (!organizerEmail.value.trim()) {
+        organizerEmail.classList.add('error');
+        organizerEmail.parentElement.querySelector('.form-error').textContent = 'Organizer email is required';
+        isValid = false;
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(organizerEmail.value)) {
+        organizerEmail.classList.add('error');
+        organizerEmail.parentElement.querySelector('.form-error').textContent = 'Please enter a valid email address';
+        isValid = false;
+    }
+    
+    // Validate date range
+    if (startDate.value && endDate.value && new Date(startDate.value) > new Date(endDate.value)) {
+        endDate.classList.add('error');
+        endDate.parentElement.querySelector('.form-error').textContent = 'End date must be after start date';
+        isValid = false;
+    }
+    
+    if (!isValid) {
+        submitBtn.disabled = false;
+        btnText.style.display = 'inline-flex';
+        loadingSpinner.style.display = 'none';
+        return;
+    }
+    
+    // Submit form
+    const formData = new FormData(form);
+    
+    fetch(form.action, {
+        method: 'POST',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json'
+        },
+        body: formData
+    })
+    .then(response => {
+        console.log('Response status:', response.status);
+        console.log('Response headers:', response.headers);
+        return response.text().then(text => {
+            console.log('Raw response:', text);
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                console.error('JSON parse error:', e);
+                throw new Error('Invalid JSON response: ' + text.substring(0, 100));
+            }
+        });
+    })
+    .then(data => {
+        console.log('Parsed data:', data);
+        if (data.success) {
+            window.location.href = data.redirect_url;
+        } else {
+            throw new Error(data.error || 'Unknown error occurred');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        
+        // Show error to user
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'alert alert-error';
+        errorDiv.innerHTML = `
+            <i class="fas fa-exclamation-triangle"></i>
+            <span>Error creating assistant: ${error.message}</span>
+        `;
+        form.insertBefore(errorDiv, form.firstChild);
+        
+        // Remove error after 5s
+        setTimeout(() => errorDiv.remove(), 5000);
+        
+        // Reset button state
+        submitBtn.disabled = false;
+        btnText.style.display = 'inline-flex';
+        loadingSpinner.style.display = 'none';
+    });
+});
+</script>
+{% endblock %}
