@@ -10,7 +10,7 @@ from .itinerary_models import (
     TripItinerary, ItineraryEvent, GroupMember, Location, Contact,
     EventType, Priority, ItineraryManager
 )
-from .webhook_server import WebhookServer, FlaskWebhookHandler, create_webhook_server
+from .webhook_server import WebhookServer, create_webhook_server
 from .config import Settings, get_settings
 
 __version__ = "1.0.0"
@@ -19,6 +19,6 @@ __all__ = [
     "ChatbotEngine",
     "TripItinerary", "ItineraryEvent", "GroupMember", "Location", "Contact",
     "EventType", "Priority", "ItineraryManager",
-    "WebhookServer", "FlaskWebhookHandler", "create_webhook_server",
+    "WebhookServer", "create_webhook_server",
     "Settings", "get_settings"
 ]

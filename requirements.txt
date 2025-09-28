@@ -1,6 +1,6 @@
 requests>=2.31.0
 openai>=1.12.0
-google-generativeai>=0.3.0
+google-genai
 flask>=2.3.0
 python-dotenv>=1.0.0
 pydantic>=2.8.0

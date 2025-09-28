@@ -108,13 +108,16 @@
 
             <!-- Test Chatbot Card -->
             <div class="card mb-4">
-                <div class="card-header">
+                <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">
                         <i class="fas fa-robot me-2"></i>Test Your AI Assistant
                     </h5>
+                    <button class="btn btn-outline-primary btn-sm" onclick="loadConversationHistory()">
+                        <i class="fas fa-history me-1"></i>View History
+                    </button>
                 </div>
                 <div class="card-body">
-                    <p class="text-muted">Try asking your AI assistant questions about the trip:</p>
+                    <p class="text-muted">Try asking your AI assistant questions about the trip. Conversations are stored and shared with email conversations:</p>
                     
                     <div id="chatContainer" class="chatbot-test" style="max-height: 400px; overflow-y: auto;">
                         <div class="chat-message">
@@ -316,7 +319,7 @@ function sendMessage() {
     chatContainer.scrollTop = chatContainer.scrollHeight;
     
     // Send request
-    fetch(`/trip/{{ trip.id }}/test`, {
+    fetch(`/trip/{{ trip.id }}/chatbot`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -336,7 +339,7 @@ function sendMessage() {
                 <i class="fas fa-robot text-primary me-2"></i>
                 <strong>AI Assistant</strong>
             </div>
-            <p class="mb-0">${data.response.replace(/\n/g, '<br>')}</p>
+            <div class="mb-0">${data.response}</div>
         `;
         chatContainer.appendChild(aiMessage);
         chatContainer.scrollTop = chatContainer.scrollHeight;
@@ -358,6 +361,99 @@ function sendMessage() {
         chatContainer.appendChild(errorMessage);
         chatContainer.scrollTop = chatContainer.scrollHeight;
     });
+}
+
+function loadConversationHistory() {
+    const tripId = window.location.pathname.split('/')[2]; // Extract trip ID from URL
+    
+    fetch(`/trip/${tripId}/conversations`)
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert('Error loading conversation history: ' + data.error);
+            return;
+        }
+        
+        // Clear current chat container
+        const chatContainer = document.getElementById('chatContainer');
+        chatContainer.innerHTML = '';
+        
+        // Add header
+        const headerMessage = document.createElement('div');
+        headerMessage.className = 'chat-message bg-light';
+        headerMessage.innerHTML = `
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <div>
+                    <i class="fas fa-history text-info me-2"></i>
+                    <strong>Conversation History (${data.total} messages)</strong>
+                </div>
+                <button class="btn btn-sm btn-outline-secondary" onclick="clearChatHistory()">
+                    <i class="fas fa-sync me-1"></i>Reset Chat
+                </button>
+            </div>
+        `;
+        chatContainer.appendChild(headerMessage);
+        
+        // Add conversations
+        data.conversations.forEach(conv => {
+            const message = document.createElement('div');
+            message.className = 'chat-message';
+            
+            // Handle different types of stored content
+            let icon, senderName, content;
+            
+            if (conv.is_email) {
+                // This is from email conversation
+                icon = 'fas fa-envelope text-info';
+                senderName = `Email from ${conv.sender}`;
+                content = `<strong>Subject:</strong> ${conv.subject}<br><br>${conv.content}`;
+            } else if (conv.sender === 'test@example.com') {
+                // This is factual info stored from web UI
+                icon = 'fas fa-info-circle text-success';
+                senderName = 'Facts Learned';
+                content = conv.content;
+            } else {
+                // Fallback
+                icon = 'fas fa-comment text-secondary';
+                senderName = conv.sender || 'Unknown';
+                content = conv.content;
+            }
+            
+            const timestampStr = conv.timestamp !== 'unknown' ? 
+                new Date(conv.timestamp).toLocaleString() : 
+                'Recent';
+            
+            message.innerHTML = `
+                <div class="d-flex align-items-center mb-2">
+                    <i class="${icon} me-2"></i>
+                    <strong>${senderName}</strong>
+                    <small class="text-muted ms-2">${timestampStr}</small>
+                </div>
+                <div class="mb-0">${content}</div>
+            `;
+            
+            chatContainer.appendChild(message);
+        });
+        
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    })
+    .catch(error => {
+        console.error('Error loading conversation history:', error);
+        alert('Error loading conversation history. Please try again.');
+    });
+}
+
+function clearChatHistory() {
+    const chatContainer = document.getElementById('chatContainer');
+    chatContainer.innerHTML = `
+        <div class="chat-message">
+            <div class="d-flex align-items-center mb-2">
+                <i class="fas fa-robot text-primary me-2"></i>
+                <strong>AI Assistant</strong>
+            </div>
+            <p class="mb-0">Hello! I'm your AI trip assistant for {{ trip.name }}. Ask me anything about your trip!</p>
+        </div>
+    `;
 }
 </script>
 {% endblock %}

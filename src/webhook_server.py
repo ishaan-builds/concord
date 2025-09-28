@@ -7,13 +7,13 @@ import logging
 import json
 from typing import Dict, Any, Optional
 from datetime import datetime
+from quotequail import quote
 import asyncio
 import chromadb
 
 from .agentmail_client import AgentMailClient
 from .chatbot_engine import ChatbotEngine
 from .itinerary_models import TripItinerary
-from .email_vectorizer import store_msg
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -55,7 +55,6 @@ class WebhookServer:
         self.chatbot_engine = chatbot_engine
         self.default_itinerary_id = default_itinerary_id
         self.chroma_client = chromadb.PersistentClient(path='./db/')
-        self.collection = self.chroma_client.get_or_create_collection(name='emails')
         
         # Store processing status to avoid duplicate processing
         self.processed_messages = set()
@@ -81,68 +80,7 @@ class WebhookServer:
                 "timestamp": datetime.now().isoformat()
             }
         
-        @self.app.post("/webhook")
-        async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
-            """
-            Handle incoming webhook events from AgentMail.
-            
-            Args:
-                request: Raw request object to handle any payload format
-                background_tasks: FastAPI background tasks
-                
-            Returns:
-                Acknowledgment response
-            """
-            try:
-                # Get raw payload and log it for debugging
-                raw_body = await request.body()
-                logger.info(f"Raw webhook payload: {raw_body}")
-                
-                # Try to parse JSON
-                try:
-                    payload_data = await request.json()
-                    logger.info(f"Parsed webhook JSON: {json.dumps(payload_data, indent=2)}")
-                except Exception as parse_error:
-                    logger.error(f"Failed to parse webhook JSON: {parse_error}")
-                    return {"status": "error", "message": "Invalid JSON payload"}
-                
-                # Handle different payload formats
-                event_type = payload_data.get("event_type") or payload_data.get("type")
-                
-                if not event_type:
-                    # Maybe the payload IS the message data directly
-                    if "sender" in payload_data or "from" in payload_data:
-                        logger.info("Treating payload as direct message data")
-                        background_tasks.add_task(
-                            self._process_incoming_message,
-                            payload_data
-                        )
-                        return {"status": "accepted", "message": "Direct message queued for processing"}
-                
-                logger.info(f"Received webhook event: {event_type}")
-                
-                if event_type == "message.received":
-                    # Extract message data from AgentMail webhook format
-                    message_data = payload_data.get("message", payload_data.get("data", payload_data))
-                    background_tasks.add_task(
-                        self._process_incoming_message,
-                        message_data
-                    )
-                    return {"status": "accepted", "message": "Message queued for processing"}
-                
-                elif event_type == "message.sent":
-                    logger.info(f"Message sent confirmation: {payload_data.get('data', {}).get('id')}")
-                    return {"status": "acknowledged"}
-                
-                else:
-                    logger.warning(f"Unhandled event type: {event_type}")
-                    return {"status": "ignored", "reason": "Unhandled event type"}
-                    
-            except Exception as e:
-                logger.error(f"Error processing webhook: {e}")
-                import traceback
-                traceback.print_exc()
-                raise HTTPException(status_code=500, detail=str(e))
+
         
         @self.app.post("/webhook/{trip_id}")
         async def handle_trip_webhook(trip_id: str, request: Request, background_tasks: BackgroundTasks):
@@ -239,10 +177,40 @@ class WebhookServer:
                 recipient = recipient[0]
             
             subject = message_data.get("subject") or "No Subject"
-            body = message_data.get("text") or message_data.get("body") or message_data.get("content")
+            raw_body = message_data.get("text") or message_data.get("body") or message_data.get("content")
+            # Use quotequail to extract only the new message content, removing quoted replies
+            if raw_body:
+                lines = raw_body.split('\n')
+                
+                # Additional aggressive cleanup for attribution lines
+                import re
+                cleaned_lines = []
+                
+                for line in lines:
+                    line_stripped = line.strip()
+                    # Skip various quote attribution patterns
+                    if (
+                        re.match(r'^On .+ at .+ wrote:$', line_stripped, re.IGNORECASE) or
+                        re.match(r'^On .+, .+ wrote:$', line_stripped, re.IGNORECASE) or
+                        re.match(r'^.+ wrote:$', line_stripped, re.IGNORECASE) or
+                        re.match(r'^From: .+', line_stripped, re.IGNORECASE) or
+                        re.match(r'^Sent: .+', line_stripped, re.IGNORECASE) or
+                        re.match(r'^To: .+', line_stripped, re.IGNORECASE) or
+                        re.match(r'^Subject: .+', line_stripped, re.IGNORECASE) or
+                        line_stripped.startswith('>') or
+                        re.match(r'^_{5,}', line_stripped) or  # Long underscores
+                        re.match(r'^-{5,}', line_stripped)     # Long dashes
+                    ):
+                        break  # Stop at first quote attribution/header
+                    
+                    if line_stripped:  # Only keep non-empty lines
+                        cleaned_lines.append(line_stripped)
+                
+                body = '\n'.join(cleaned_lines).strip()
+            else:
+                body = ""
             inbox_id = message_data.get("inbox_id")
-            labels = message_data.get("labels")
-            
+            labels = str(message_data.get("labels") or [])
             
             # Ensure we have a valid message_id
             if not message_id:
@@ -266,23 +234,25 @@ class WebhookServer:
                 logger.info("Skipping bot's own message")
                 return
             
+            logger.info(f"Message stored in database with id: {message_id}")
+            
             # Get message history for context (disabled due to API limitations)
             message_history = []
             # Note: AgentMail thread messages API returns 404, so we skip message history for now
             # This doesn't affect functionality as the AI can still generate good responses
             
             # Generate AI response
-            ai_response = self.chatbot_engine.generate_response(
+            response = self.chatbot_engine.generate_response(
                 query=body,
                 itinerary_id=self.default_itinerary_id,
                 message_history=message_history,
-                sender_email=sender
+                sender_email=sender,
             )
+
+            ai_response = response.query_response
             
-            # Format response with suggestions
-            formatted_response = self.chatbot_engine.format_response_with_suggestions(
-                ai_response, body
-            )
+            # Use raw AI response
+            formatted_response = ai_response
             
             # Send response via AgentMail - send new message for now (reply endpoints seem to have issues)
             response_subject = self._generate_response_subject(subject)
@@ -394,9 +364,63 @@ class WebhookServer:
                 return
             
             recipient = message_data.get("to")
+            if isinstance(recipient, list) and len(recipient) > 0:
+                recipient = recipient[0]
+            elif isinstance(recipient, list):
+                recipient = ""
             subject = message_data.get("subject", "")
-            body = message_data.get("body") or message_data.get("text", "")
+            raw_body = message_data.get("body") or message_data.get("text", "")
+            # Use quotequail to extract only the new message content, removing quoted replies
+            if raw_body:
+                quote_result = quote(raw_body)  # quotequail's quote function extracts new content
+                
+                # Handle quotequail return value (returns list of tuples: (is_quote, text))
+                if isinstance(quote_result, list):
+                    # Extract only the non-quoted text (where is_quote is True)
+                    new_content_parts = []
+                    for is_quote, text in quote_result:
+                        if is_quote:  # True means it's new content, not a quote
+                            new_content_parts.append(text)
+                    body = '\n'.join(new_content_parts)
+                else:
+                    body = quote_result or ''
+                
+                # Additional aggressive cleanup for attribution lines
+                import re
+                lines = body.split('\n')
+                cleaned_lines = []
+                
+                for line in lines:
+                    line_stripped = line.strip()
+                    # Skip various quote attribution patterns
+                    if (
+                        re.match(r'^On .+ at .+ wrote:$', line_stripped, re.IGNORECASE) or
+                        re.match(r'^On .+, .+ wrote:$', line_stripped, re.IGNORECASE) or
+                        re.match(r'^.+ wrote:$', line_stripped, re.IGNORECASE) or
+                        re.match(r'^From: .+', line_stripped, re.IGNORECASE) or
+                        re.match(r'^Sent: .+', line_stripped, re.IGNORECASE) or
+                        re.match(r'^To: .+', line_stripped, re.IGNORECASE) or
+                        re.match(r'^Subject: .+', line_stripped, re.IGNORECASE) or
+                        line_stripped.startswith('>') or
+                        re.match(r'^_{5,}', line_stripped) or  # Long underscores
+                        re.match(r'^-{5,}', line_stripped)     # Long dashes
+                    ):
+                        break  # Stop at first quote attribution/header
+                    
+                    if line_stripped:  # Only keep non-empty lines
+                        cleaned_lines.append(line_stripped)
+                
+                body = '\n'.join(cleaned_lines).strip()
+            else:
+                body = ""
             inbox_id = message_data.get("inbox_id") or trip_data['inbox_id']
+            labels = str(message_data.get("labels") or [])
+            
+            # Check if this message is actually for this trip's inbox
+            expected_inbox_id = trip_data['inbox_id']
+            if inbox_id != expected_inbox_id:
+                logger.info(f"Skipping message for trip {trip_id}: inbox_id '{inbox_id}' doesn't match expected '{expected_inbox_id}'")
+                return
             
             logger.info(f"Processing message for trip {trip_id} from {sender}: {subject}")
             
@@ -405,18 +429,30 @@ class WebhookServer:
                 logger.info(f"Skipping bot's own message for trip {trip_id}")
                 return
             
+            collection = self.chroma_client.get_or_create_collection(trip_id)
+
             # Generate AI response using trip-specific chatbot
-            ai_response = trip_chatbot_engine.generate_response(
+            response = trip_chatbot_engine.generate_response(
                 query=body,
                 itinerary_id=trip_id,
+                collection=collection,
                 message_history=[],
                 sender_email=sender
             )
             
-            # Format response with suggestions
-            formatted_response = trip_chatbot_engine.format_response_with_suggestions(
-                ai_response, body
-            )
+            ai_response = response.query_response
+            
+            if not response.is_pure_question:
+                collection.add(
+                    ids=message_id,
+                    documents=response.facts_summary,
+                    metadatas={'sender': sender, 'recipient': recipient, 'subject': subject, 'labels': labels}
+                )
+
+            logger.info(f"Stored message {message_id} in database")
+
+            # Use raw AI response
+            formatted_response = ai_response
             
             # Send response
             response_subject = self._generate_response_subject(subject)
@@ -483,109 +519,6 @@ class WebhookServer:
     def get_app(self) -> FastAPI:
         """Get the FastAPI application instance."""
         return self.app
-
-# Standalone webhook handler functions for use with other frameworks
-class FlaskWebhookHandler:
-    """Flask-compatible webhook handler."""
-    
-    def __init__(self, agentmail_client: AgentMailClient, chatbot_engine: ChatbotEngine,
-                 default_itinerary_id: str):
-        """
-        Initialize Flask webhook handler.
-        
-        Args:
-            agentmail_client: AgentMail API client
-            chatbot_engine: AI chatbot engine
-            default_itinerary_id: Default itinerary ID
-        """
-        self.agentmail_client = agentmail_client
-        self.chatbot_engine = chatbot_engine
-        self.default_itinerary_id = default_itinerary_id
-        self.processed_messages = set()
-    
-    def handle_webhook_request(self, request_json: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Handle webhook request in Flask.
-        
-        Args:
-            request_json: JSON payload from webhook request
-            
-        Returns:
-            Response dictionary
-        """
-        try:
-            event_type = request_json.get("event_type")
-            data = request_json.get("data", {})
-            
-            if event_type == "message.received":
-                # Process message synchronously in Flask
-                self._process_message_sync(data)
-                return {"status": "processed"}
-            
-            return {"status": "acknowledged"}
-            
-        except Exception as e:
-            logger.error(f"Flask webhook error: {e}")
-            return {"status": "error", "message": str(e)}
-    
-    def _process_message_sync(self, message_data: Dict[str, Any]):
-        """Process message synchronously (for Flask)."""
-        message_id = message_data.get("id")
-        
-        if message_id in self.processed_messages:
-            return
-        
-        self.processed_messages.add(message_id)
-        
-        try:
-            # Similar processing logic as FastAPI version
-            thread_id = message_data.get("thread_id")
-            sender = message_data.get("sender")
-            body = message_data.get("body")
-            subject = message_data.get("subject")
-            inbox_id = message_data.get("inbox_id")
-            
-            # Skip bot messages
-            inboxes = self.agentmail_client.list_inboxes()
-            bot_addresses = [inbox.email_address for inbox in inboxes]
-            if sender in bot_addresses:
-                return
-            
-            # Get message history
-            message_history = []
-            if thread_id:
-                try:
-                    messages = self.agentmail_client.get_thread_messages(thread_id)
-                    message_history = [msg for msg in messages if msg.id != message_id][-10:]
-                except:
-                    pass
-            
-            # Generate and send response
-            ai_response = self.chatbot_engine.generate_response(
-                query=body,
-                itinerary_id=self.default_itinerary_id,
-                message_history=message_history,
-                sender_email=sender
-            )
-            
-            formatted_response = self.chatbot_engine.format_response_with_suggestions(
-                ai_response, body
-            )
-            
-            response_subject = f"Re: {subject}" if not subject.lower().startswith("re:") else subject
-            
-            self.agentmail_client.send_message(
-                inbox_id=inbox_id,
-                to=sender,
-                subject=response_subject,
-                body=formatted_response,
-                thread_id=thread_id
-            )
-            
-            logger.info(f"Processed and responded to message from {sender}")
-            
-        except Exception as e:
-            logger.error(f"Error in sync message processing: {e}")
 
 def create_webhook_server(agentmail_client: AgentMailClient, 
                          chatbot_engine: ChatbotEngine,

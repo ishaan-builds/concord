@@ -2,8 +2,11 @@
 AI-powered chatbot engine for processing group itinerary queries.
 """
 import logging
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any, Tuple, Union
 from datetime import datetime, date
+from chromadb import Collection  
+from pydantic import BaseModel, Field
+from enum import Enum
 import re
 import json
 
@@ -11,6 +14,12 @@ from .itinerary_models import TripItinerary, ItineraryEvent, EventType, Itinerar
 from .agentmail_client import AgentMailClient, Message
 
 logger = logging.getLogger(__name__)
+
+class EmailAnalysis(BaseModel):
+    """Simplified email analysis: pure questions vs facts."""
+    is_pure_question: bool = Field(description="True if this is only a question with no facts to store")
+    facts_summary: str = Field(description="Summary of factual information to store. Empty if pure question.")
+    query_response: str = Field(description="Response to send back to the user")
 
 class ChatbotEngine:
     """AI-powered chatbot for group itinerary management."""
@@ -39,9 +48,10 @@ class ChatbotEngine:
         
         # Initialize the appropriate AI client
         if self.ai_provider == "google" and google_api_key:
-            import google.generativeai as genai
-            genai.configure(api_key=google_api_key)
-            self.google_model = genai.GenerativeModel(model)
+            from google import genai
+            from google.genai import types
+            self.google_client = genai.Client(api_key=google_api_key)
+            self.genai_types = types
         
     def set_itinerary(self, itinerary: TripItinerary) -> None:
         """Set the current itinerary for the chatbot."""
@@ -224,9 +234,9 @@ class ChatbotEngine:
         
         return "general", extracted_data
     
-    def generate_response(self, query: str, itinerary_id: str, 
-                         message_history: List[Message] = None,
-                         sender_email: str = None) -> str:
+    def generate_response(self, query: str, itinerary_id: str,
+                            collection: Collection, message_history: List[Message] = None,
+                            sender_email: str = None) -> EmailAnalysis:
         """
         Generate AI response to user query.
         
@@ -244,151 +254,218 @@ class ChatbotEngine:
             itinerary_context = self.get_itinerary_context(itinerary_id)
             
             # Get message history context
-            history_context = ""
+            msg_context = ""
             if message_history:
-                history_context = self.get_message_history_context(message_history)
+                msg_context += self.get_message_history_context(message_history)
+            elif collection: 
+                query_results = collection.query(
+                    query_texts=[query],
+                    n_results=10
+                )
+                logger.info(f"RAG query documents: \n{query_results['distances']}\n-----\nRAG query distances: \n{query_results['distances']}\n")
+                # Extract the documents from the query results
+                if query_results and 'documents' in query_results and query_results['documents']:
+                    msg_context += "\n".join(query_results['documents'][0])
             
             # Extract intent and relevant data
             intent, extracted_data = self.extract_query_intent(query)
             
             # Build system prompt
-            system_prompt = f"""You are a helpful AI assistant for a group trip coordination chatbot. 
-            You have access to the complete trip itinerary and can answer questions about:
-            - Schedule and timing of events
-            - Locations and directions
-            - Contact information
-            - Costs and budget information
-            - Transportation details
-            - Accommodation information
-            - Restaurant and dining plans
-            - Activities and attractions
-            - Emergency information
+            system_prompt = f"""You are a helpful AI assistant for a group trip coordination chatbot with advanced content analysis capabilities.
+
+            ## Your Responsibilities:
+            1. Answer questions about the trip itinerary and logistics
+            2. Analyze incoming messages to extract valuable information for future reference
+            3. Classify content to optimize our knowledge storage system (RAG)
+
+            ## Simple Classification System:
             
-            Always be friendly, helpful, and concise. If you don't have specific information, 
-            suggest how the person might find it or who to contact.
+            You need to determine if an email is:
+            1. **PURE QUESTION** - Only asking for information, no facts to store
+            2. **CONTAINS FACTS** - Has factual information that should be remembered
             
-            Current trip information:
-            {itinerary_context}
+            ## Pure Questions (Don't Store):
+            - "What time is dinner?"
+            - "Where are we staying?" 
+            - "How much did we budget?"
+            - "What's the weather like?"
+            - "When do we leave?"
             
-            {history_context if history_context else ""}
+            ## Contains Facts (Store the Facts):
+            - "I'm vegetarian" → Store: "User is vegetarian" 
+            - "The hotel changed check-in to 4pm" → Store: "Hotel check-in changed to 4pm"
+            - "Where's dinner? Also I'm allergic to shellfish" → Store: "User is allergic to shellfish" (ignore the question)
+            - "My flight is delayed to 8pm" → Store: "User's flight delayed to 8pm"
+            - "I booked an Uber for 7am" → Store: "Uber booked for 7am pickup"
             
-            The person asking is: {sender_email if sender_email else "Unknown"}
-            Detected query intent: {intent}
-            Extracted information: {extracted_data if extracted_data else "None"}
+            ## What Facts to Store:
+            - Dietary restrictions/preferences/allergies
+            - Schedule/booking/timing changes
+            - Transportation arrangements  
+            - Budget updates
+            - Contact information updates
+            - Personal constraints or availability
+            - Any concrete trip information that others should know
+            
+            ## Important:
+            - If a message has BOTH questions and facts, classify as "contains facts" and extract only the factual parts
+            - Focus on information that would be useful for trip coordination
+            - Keep fact summaries concise and clear
+            
+            ## Response Guidelines:
+            - Always provide a helpful response to any questions
+            - Acknowledge when you've received and understood new information
+            - Be friendly and concise
+            - If unsure about classification, err on the side of storing useful information
+            
+            ## JSON Response Format:
+            You MUST respond with valid JSON in this exact format:
+            {{
+                "is_pure_question": true/false,
+                "facts_summary": "Summary of factual information to store (empty string if pure question)",
+                "query_response": "Your helpful response to the user"
+            }}
+            
+            ## Current Context:
+            Trip Information: {itinerary_context}
+            Message History: {msg_context if msg_context else "None"}
+            Sender: {sender_email if sender_email else "Unknown"}
+            Detected Intent: {intent}
+            Extracted Data: {extracted_data if extracted_data else "None"}
             """
             
             # Generate response using the configured AI provider
             if self.ai_provider == "google":
                 # Use Google AI (Gemini)
                 prompt = f"{system_prompt}\n\nUser: {query}\nAssistant:"
-                response = self.google_model.generate_content(
-                    prompt,
-                    generation_config={
-                        "temperature": self.temperature,
-                        "max_output_tokens": self.max_tokens,
-                    }
+                
+                # Log what we're sending to Gemini
+                logger.info(f"=== SENDING TO GEMINI ===")
+                logger.info(f"Model: {self.model}")
+                logger.info(f"Prompt length: {len(prompt)} characters")
+                logger.info(f"Full prompt:\n{prompt}")
+                logger.info(f"Generation config: temperature={self.temperature}, max_output_tokens={self.max_tokens}")
+                logger.info(f"=== END GEMINI REQUEST ===")
+                
+                response = self.google_client.models.generate_content(
+                    model=self.model,
+                    contents=prompt,
+                    config=self.genai_types.GenerateContentConfig(
+                        temperature=self.temperature,
+                        max_output_tokens=self.max_tokens,
+                        response_mime_type="application/json",
+                        response_schema=EmailAnalysis
+                    )
                 )
-                return response.text.strip()
+                parsed_response = response.parsed
+
+                # Log the response we got back
+                logger.info(f"=== GEMINI RESPONSE ===")
+                logger.info(f"Response: {parsed_response}")
+                logger.info(f"=== END GEMINI RESPONSE ===")
+                
+                return parsed_response
             
             else:
                 # Use OpenAI (default)
                 from openai import OpenAI
                 client = OpenAI(api_key=self.openai_api_key)
                 
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": query}
+                ]
+                
+                # Log what we're sending to OpenAI
+                logger.info(f"=== SENDING TO OPENAI ===")
+                logger.info(f"Model: {self.model}")
+                logger.info(f"Messages: {json.dumps(messages, indent=2)}")
+                logger.info(f"Config: max_tokens={self.max_tokens}, temperature={self.temperature}")
+                logger.info(f"=== END OPENAI REQUEST ===")
+                
                 response = client.chat.completions.create(
                     model=self.model,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": query}
-                    ],
+                    messages=messages,
                     max_tokens=self.max_tokens,
                     temperature=self.temperature,
                     top_p=1.0,
                     frequency_penalty=0.0,
-                    presence_penalty=0.0
+                    presence_penalty=0.0,
+                    response_format={"type": "json_object"}
                 )
                 
-                return response.choices[0].message.content.strip()
+                # Log the response we got back
+                response_text = response.choices[0].message.content.strip()
+                logger.info(f"=== OPENAI RESPONSE ===")
+                logger.info(f"Response text: {response_text}")
+                logger.info(f"=== END OPENAI RESPONSE ===")
+                
+                # Parse JSON response into EmailAnalysis object
+                try:
+                    response_json = json.loads(response_text)
+                    parsed_response = EmailAnalysis(**response_json)
+                    return parsed_response
+                except (json.JSONDecodeError, ValueError) as e:
+                    logger.error(f"Failed to parse OpenAI JSON response: {e}")
+                    # Fallback: create a basic EmailAnalysis object
+                    return EmailAnalysis(
+                        is_pure_question=True,
+                        facts_summary="",
+                        query_response=response_text
+                    )
             
         except Exception as e:
             logger.error(f"Error generating AI response: {e}")
             return f"I'm sorry, I encountered an error processing your request. Please try again or contact the trip organizer for assistance."
     
-    def suggest_follow_up_questions(self, query: str, response: str) -> List[str]:
+    def should_store_in_rag(self, analysis: EmailAnalysis) -> bool:
         """
-        Suggest relevant follow-up questions based on the query and response.
+        Determine if content should be stored in RAG based on analysis.
         
         Args:
-            query: Original user query
-            response: AI response
+            analysis: EmailAnalysis result from generate_response
             
         Returns:
-            List of suggested follow-up questions
+            bool: True if content should be stored in RAG
         """
-        intent, _ = self.extract_query_intent(query)
+        # Only store if it's not a pure question and has facts
+        return not analysis.is_pure_question and bool(analysis.facts_summary.strip())
+    
+    def get_storage_content(self, analysis: EmailAnalysis) -> str:
+        """  
+        Get the content that should be stored in RAG.
         
-        follow_ups = {
-            "schedule": [
-                "What time should I leave to get there?",
-                "Is there anything I need to bring?",
-                "Who else will be there?"
-            ],
-            "location": [
-                "How long does it take to get there?",
-                "What's the best way to travel there?",
-                "Are there nearby parking options?"
-            ],
-            "contact": [
-                "What are their business hours?",
-                "Should I mention I'm with the group?",
-                "Is there a backup contact?"
-            ],
-            "cost": [
-                "Is this already paid for?",
-                "Do I need to bring cash?",
-                "Are tips included?"
-            ],
-            "transport": [
-                "What time should I arrive at pickup?",
-                "Do I need to print tickets?",
-                "What if I'm running late?"
-            ],
-            "accommodation": [
-                "What time is check-in/check-out?",
-                "What amenities are included?",
-                "How do I get room keys?"
-            ],
-            "food": [
-                "Do they accommodate dietary restrictions?",
-                "Is it family-style or individual orders?",
-                "What's the dress code?"
-            ]
+        Args:
+            analysis: EmailAnalysis result from generate_response
+            
+        Returns:
+            str: Content to store, or empty string if nothing to store
+        """
+        if not self.should_store_in_rag(analysis):
+            return ""
+            
+        return analysis.facts_summary.strip()
+    
+    def get_rag_metadata(self, analysis: EmailAnalysis, sender_email: str = None) -> Dict[str, Any]:
+        """
+        Generate metadata for RAG storage.
+        
+        Args:
+            analysis: EmailAnalysis result
+            sender_email: Email of the sender
+            
+        Returns:
+            Dict: Metadata for the RAG entry
+        """
+        metadata = {
+            "is_pure_question": analysis.is_pure_question,
+            "timestamp": datetime.now().isoformat(),
+            "has_facts": bool(analysis.facts_summary.strip())
         }
         
-        return follow_ups.get(intent, [
-            "What should I know about this?",
-            "Is there anything else planned?",
-            "Who should I contact if I have questions?"
-        ])
-    
-    def format_response_with_suggestions(self, response: str, query: str) -> str:
-        """
-        Format the response with follow-up suggestions.
-        
-        Args:
-            response: AI-generated response
-            query: Original query
+        if sender_email:
+            metadata["sender"] = sender_email
             
-        Returns:
-            Formatted response with suggestions
-        """
-        suggestions = self.suggest_follow_up_questions(query, response)
-        
-        formatted_response = response
-        
-        if suggestions:
-            formatted_response += "\n\n**You might also want to ask:**\n"
-            for i, suggestion in enumerate(suggestions[:3], 1):  # Limit to 3 suggestions
-                formatted_response += f"{i}. {suggestion}\n"
-        
-        return formatted_response
+        return metadata
+
+    

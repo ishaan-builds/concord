@@ -7,6 +7,7 @@ import sys
 import json
 import uuid
 import logging
+import chromadb
 from datetime import datetime, date
 from typing import Dict, List, Optional
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
@@ -28,6 +29,9 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'dev-secret-key-change-in-production')
+
+# Initialize ChromaDB client (same path as webhook server)
+chroma_client = chromadb.PersistentClient(path='./db/')
 
 # Store created trips in memory (in production, use a database)
 TRIPS_STORE = {}
@@ -226,9 +230,9 @@ def trip_detail(trip_id):
     trip = TRIPS_STORE[trip_id]
     return render_template('trip_detail.html', trip=trip)
 
-@app.route('/trip/<trip_id>/test', methods=['POST'])
-def test_chatbot(trip_id):
-    """Test the chatbot for a specific trip."""
+@app.route('/trip/<trip_id>/chatbot', methods=['POST'])
+def chatbot(trip_id):
+    """Chat with the AI assistant for a specific trip."""
     if trip_id not in TRIPS_STORE:
         return jsonify({'error': 'Trip not found'}), 404
     
@@ -258,22 +262,111 @@ def test_chatbot(trip_id):
         )
         chatbot_engine.set_itinerary(itinerary)
         
-        # Generate response
+        # Get or create ChromaDB collection for this trip (same as webhook server)
+        try:
+            collection = chroma_client.get_or_create_collection(trip_id)
+        except Exception as e:
+            logger.warning(f"Could not access ChromaDB collection: {e}. Using fallback.")
+            collection = None
+        
+        # Generate unique message ID for this conversation
+        message_id = f"webui_{int(datetime.now().timestamp() * 1000)}"
+        
+        # Generate response with ChromaDB collection - EXACTLY like webhook server
         response = chatbot_engine.generate_response(
             query=query,
             itinerary_id=trip_id,
-            sender_email="test@example.com"
+            collection=collection,
+            message_history=[],  # Empty list like webhook server
+            sender_email="webui_chatbot"
         )
         
-        formatted_response = chatbot_engine.format_response_with_suggestions(response, query)
+        # Extract AI response - EXACTLY like webhook server
+        ai_response = response.query_response
+        
+        # Store facts in ChromaDB if not a pure question - EXACTLY like webhook server
+        if collection is not None:
+            try:
+                if not response.is_pure_question:
+                    collection.add(
+                        ids=[message_id],
+                        documents=[response.facts_summary],
+                        metadatas={
+                            'sender': 'test@example.com',
+                            'recipient': 'webui',
+                            'subject': 'Web UI Chat',
+                            'labels': ''  # Convert list to comma-separated string
+                        }
+                    )
+                    logger.info(f"Stored factual information from message {message_id} in database")
+                else:
+                    logger.info(f"Message {message_id} was a pure question, not storing facts")
+            except Exception as e:
+                logger.warning(f"Could not store information in ChromaDB: {e}")
+        else:
+            logger.info("ChromaDB not available, information not stored")
+        
+        # Use raw AI response - EXACTLY like webhook server
+        formatted_response = ai_response
+        
+        # Convert text to HTML using AgentMail client's conversion function
+        agentmail_client = AgentMailClient(settings.agentmail.api_token)
+        html_formatted_response = agentmail_client._convert_text_to_html(formatted_response)
         
         return jsonify({
-            'response': formatted_response,
+            'response': html_formatted_response,
             'query': query
         })
         
     except Exception as e:
         logger.error(f"Error testing chatbot: {e}")
+        return jsonify({'error': f'Error: {str(e)}'}), 500
+
+@app.route('/trip/<trip_id>/conversations', methods=['GET'])
+def get_conversations(trip_id):
+    """Get conversation history for a trip from ChromaDB."""
+    if trip_id not in TRIPS_STORE:
+        return jsonify({'error': 'Trip not found'}), 404
+    
+    try:
+        # Get the ChromaDB collection for this trip
+        collection = chroma_client.get_or_create_collection(trip_id)
+        
+        # Get all conversations from the collection
+        results = collection.get(
+            include=['documents', 'metadatas']
+        )
+        
+        # Format conversations chronologically (match webhook server format)
+        conversations = []
+        if results['documents']:
+            for i, (doc, metadata) in enumerate(zip(results['documents'], results['metadatas'])):
+                # Determine if this is AI or user based on ChromaDB storage pattern
+                # Emails store actual conversations, web UI stores facts summaries
+                sender = metadata.get('sender', 'unknown')
+                is_email = '@' in sender and sender != 'test@example.com'
+                
+                conversations.append({
+                    'id': results['ids'][i],
+                    'content': doc,
+                    'sender': sender,
+                    'recipient': metadata.get('recipient', 'unknown'),
+                    'subject': metadata.get('subject', 'No subject'),
+                    'labels': metadata.get('labels', []),
+                    'is_email': is_email,
+                    'timestamp': metadata.get('timestamp', 'unknown')
+                })
+        
+        # Sort by ID (which includes timestamp info) since not all have timestamp metadata
+        conversations.sort(key=lambda x: x['id'])
+        
+        return jsonify({
+            'conversations': conversations,
+            'total': len(conversations)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting conversations: {e}")
         return jsonify({'error': f'Error: {str(e)}'}), 500
 
 @app.route('/trip/<trip_id>/delete', methods=['POST'])
