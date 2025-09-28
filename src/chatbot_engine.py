@@ -327,8 +327,7 @@ class ChatbotEngine:
             }}
             
             ## Current Context:
-            Trip Information: {itinerary_context}
-            Message History: {msg_context if msg_context else "None"}
+            Trip Information: {itinerary_context} \n {msg_context if msg_context else "None"}
             Sender: {sender_email if sender_email else "Unknown"}
             Detected Intent: {intent}
             Extracted Data: {extracted_data if extracted_data else "None"}

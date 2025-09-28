@@ -54,7 +54,7 @@ class WebhookServer:
         self.agentmail_client = agentmail_client
         self.chatbot_engine = chatbot_engine
         self.default_itinerary_id = default_itinerary_id
-        self.chroma_client = chromadb.PersistentClient(path='./db/')
+        self.chroma_client = chromadb.HttpClient(host='localhost', port=8001)
         
         # Store processing status to avoid duplicate processing
         self.processed_messages = set()
@@ -370,6 +370,8 @@ class WebhookServer:
                 recipient = ""
             subject = message_data.get("subject", "")
             raw_body = message_data.get("body") or message_data.get("text", "")
+
+            thread = 
             # Use quotequail to extract only the new message content, removing quoted replies
             if raw_body:
                 quote_result = quote(raw_body)  # quotequail's quote function extracts new content
@@ -410,9 +412,9 @@ class WebhookServer:
                     if line_stripped:  # Only keep non-empty lines
                         cleaned_lines.append(line_stripped)
                 
-                body = '\n'.join(cleaned_lines).strip()
+                query = '\n'.join(cleaned_lines).strip()
             else:
-                body = ""
+                query = ""
             inbox_id = message_data.get("inbox_id") or trip_data['inbox_id']
             labels = str(message_data.get("labels") or [])
             
@@ -433,7 +435,7 @@ class WebhookServer:
 
             # Generate AI response using trip-specific chatbot
             response = trip_chatbot_engine.generate_response(
-                query=body,
+                query=query,
                 itinerary_id=trip_id,
                 collection=collection,
                 message_history=[],

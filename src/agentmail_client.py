@@ -48,20 +48,288 @@ class Webhook:
     is_active: bool
     created_at: datetime
 
-class AgentMailClient:
+@dataclass
+class InboxResponse:
+    """Response object for inbox operations."""
+    inbox_id: str
+    display_name: str
+    email_address: str
+    created_at: datetime
+
+@dataclass
+class MessageResponse:
+    """Response object for message operations."""
+    message_id: str
+    thread_id: Optional[str]
+    sender: str
+    recipient: str
+    subject: str
+    body: str
+    created_at: datetime
+    message_type: str
+
+@dataclass
+class MessagesListResponse:
+    """Response object for listing messages."""
+    messages: List['MessageResponse']
+    count: int
+    
+    def __iter__(self):
+        return iter(self.messages)
+    
+    def __len__(self):
+        return self.count
+
+@dataclass
+class ThreadResponse:
+    """Response object for thread operations with messages."""
+    id: str
+    subject: str
+    participants: List[str]
+    message_count: int
+    last_message_at: datetime
+    inbox_id: str
+    messages: List['MessageResponse']
+
+class InboxMessagesManager:
+    """Manager for inbox-specific message operations."""
+    
+    def __init__(self, client: 'AgentMail'):
+        self.client = client
+    
+    def send(self, inbox_id: str, to: str, subject: str, text: str, html: Optional[str] = None, labels: Optional[List[str]] = None) -> 'MessageResponse':
+        """Send a new message from an inbox."""
+        data = {
+            "to": [to] if isinstance(to, str) else to,
+            "subject": subject,
+            "text": text,
+            "html": html or self.client._convert_text_to_html(text)
+        }
+        if labels:
+            data["labels"] = labels
+            
+        response = self.client._make_request("POST", f"/inboxes/{inbox_id}/messages/send", data)
+        
+        return MessageResponse(
+            message_id=response.get("message_id") or response.get("id", "unknown"),
+            thread_id=response.get("thread_id"),
+            sender=response.get("sender", inbox_id),
+            recipient=response.get("recipient", to), 
+            subject=response.get("subject", subject),
+            body=response.get("body", text),
+            created_at=datetime.now(),
+            message_type=response.get("type", "email")
+        )
+    
+    def reply(self, inbox_id: str, message_id: str, text: str, html: Optional[str] = None, attachments: Optional[List] = None) -> 'MessageResponse':
+        """Reply to a message."""
+        data = {
+            "message_id": message_id,
+            "text": text,
+            "html": html or self.client._convert_text_to_html(text)
+        }
+        if attachments:
+            data["attachments"] = attachments
+            
+        response = self.client._make_request("POST", f"/inboxes/{inbox_id}/messages/reply", data)
+        
+        return MessageResponse(
+            message_id=response.get("message_id") or response.get("id", "unknown"),
+            thread_id=response.get("thread_id"),
+            sender=response.get("sender", inbox_id),
+            recipient=response.get("recipient"),
+            subject=response.get("subject"),
+            body=response.get("body", text),
+            created_at=datetime.now(),
+            message_type=response.get("type", "email")
+        )
+    
+    def list(self, inbox_id: str) -> 'MessagesListResponse':
+        """List all messages in an inbox."""
+        response = self.client._make_request("GET", f"/inboxes/{inbox_id}/messages")
+        
+        messages = []
+        for message_data in response.get("messages", []):
+            messages.append(MessageResponse(
+                message_id=message_data["id"],
+                thread_id=message_data.get("thread_id"),
+                sender=message_data["sender"],
+                recipient=message_data["recipient"],
+                subject=message_data.get("subject", ""),
+                body=message_data.get("body", ""),
+                created_at=datetime.fromisoformat(message_data["created_at"]),
+                message_type=message_data.get("type", "email")
+            ))
+        return MessagesListResponse(messages=messages, count=len(messages))
+    
+    def get(self, inbox_id: str, message_id: str) -> Optional[Message]:
+        """Get a specific message."""
+        try:
+            response = self.client._make_request("GET", f"/inboxes/{inbox_id}/messages/{message_id}")
+            return Message(
+                id=response["id"],
+                thread_id=response.get("thread_id"),
+                sender=response["sender"],
+                recipient=response["recipient"],
+                subject=response.get("subject", ""),
+                body=response.get("body", ""),
+                created_at=datetime.fromisoformat(response["created_at"]),
+                message_type=response.get("type", "email")
+            )
+        except Exception as e:
+            logger.error(f"Failed to get message {message_id}: {e}")
+            return None
+
+class InboxThreadsManager:
+    """Manager for inbox-specific thread operations."""
+    
+    def __init__(self, client: 'AgentMail'):
+        self.client = client
+    
+    def list(self, inbox_id: str) -> List[Thread]:
+        """List all threads in an inbox."""
+        response = self.client._make_request("GET", f"/inboxes/{inbox_id}/threads")
+        
+        threads = []
+        for thread_data in response.get("threads", []):
+            threads.append(Thread(
+                id=thread_data["id"],
+                subject=thread_data["subject"],
+                participants=thread_data["participants"],
+                message_count=thread_data["message_count"],
+                last_message_at=datetime.fromisoformat(thread_data["last_message_at"]),
+                inbox_id=thread_data["inbox_id"]
+            ))
+        return threads
+
+class InboxesManager:
+    """Manager for inbox operations."""
+    
+    def __init__(self, client: 'AgentMail'):
+        self.client = client
+        self.messages = InboxMessagesManager(client)
+        self.threads = InboxThreadsManager(client)
+    
+    def create(self, username: Optional[str] = None, domain: Optional[str] = None, display_name: Optional[str] = None) -> 'InboxResponse':
+        """Create a new inbox."""
+        data = {}
+        if username:
+            data["username"] = username
+        if domain:
+            data["domain"] = domain
+        if display_name:
+            data["display_name"] = display_name
+            
+        response = self.client._make_request("POST", "/inboxes", data)
+        
+        return InboxResponse(
+            inbox_id=response["inbox_id"],
+            display_name=response.get("display_name", ""),
+            email_address=response["inbox_id"],
+            created_at=datetime.fromisoformat(response["created_at"])
+        )
+    
+    def get(self, inbox_id: str) -> Optional['InboxResponse']:
+        """Get a specific inbox by ID."""
+        try:
+            response = self.client._make_request("GET", f"/inboxes/{inbox_id}")
+            return InboxResponse(
+                inbox_id=response["inbox_id"],
+                display_name=response.get("display_name", ""),
+                email_address=response["inbox_id"],
+                created_at=datetime.fromisoformat(response["created_at"])
+            )
+        except Exception as e:
+            logger.error(f"Failed to get inbox {inbox_id}: {e}")
+            return None
+    
+    def list(self) -> List['InboxResponse']:
+        """List all inboxes."""
+        response = self.client._make_request("GET", "/inboxes")
+        
+        inboxes = []
+        for inbox_data in response.get("inboxes", []):
+            inboxes.append(InboxResponse(
+                inbox_id=inbox_data["inbox_id"],
+                display_name=inbox_data.get("display_name", ""),
+                email_address=inbox_data["inbox_id"],
+                created_at=datetime.fromisoformat(inbox_data["created_at"])
+            ))
+        return inboxes
+
+class ThreadsManager:
+    """Manager for organization-wide thread operations."""
+    
+    def __init__(self, client: 'AgentMail'):
+        self.client = client
+    
+    def get(self, thread_id: str) -> 'ThreadResponse':
+        """Get thread details including all messages."""
+        response = self.client._make_request("GET", f"/threads/{thread_id}")
+        
+        messages = []
+        for message_data in response.get("messages", []):
+            messages.append(MessageResponse(
+                message_id=message_data["id"],
+                thread_id=message_data.get("thread_id", thread_id),
+                sender=message_data["sender"],
+                recipient=message_data["recipient"],
+                subject=message_data.get("subject", ""),
+                body=message_data.get("body", ""),
+                created_at=datetime.fromisoformat(message_data["created_at"]),
+                message_type=message_data.get("type", "email")
+            ))
+        
+        return ThreadResponse(
+            id=response["id"],
+            subject=response["subject"],
+            participants=response["participants"],
+            message_count=response["message_count"],
+            last_message_at=datetime.fromisoformat(response["last_message_at"]),
+            inbox_id=response["inbox_id"],
+            messages=messages
+        )
+    
+    def list(self) -> List[Thread]:
+        """List all threads across the organization."""
+        response = self.client._make_request("GET", "/threads")
+        
+        threads = []
+        for thread_data in response.get("threads", []):
+            threads.append(Thread(
+                id=thread_data["id"],
+                subject=thread_data["subject"],
+                participants=thread_data["participants"],
+                message_count=thread_data["message_count"],
+                last_message_at=datetime.fromisoformat(thread_data["last_message_at"]),
+                inbox_id=thread_data["inbox_id"]
+            ))
+        return threads
+
+class AgentMail:
     """Client for interacting with AgentMail API."""
     
-    def __init__(self, api_token: str, base_url: str = "https://api.agentmail.to/v0"):
+    def __init__(self, api_key: Optional[str] = None, api_token: Optional[str] = None, base_url: str = "https://api.agentmail.to/v0"):
         """
         Initialize the AgentMail client.
         
         Args:
-            api_token: Your AgentMail API token
+            api_key: Your AgentMail API key (preferred)
+            api_token: Your AgentMail API token (legacy, for backward compatibility)
             base_url: Base URL for AgentMail API (default production URL)
         """
-        self.api_token = api_token
+        # Support both api_key (new) and api_token (legacy) for backward compatibility
+        token = api_key or api_token
+        if not token:
+            raise ValueError("Either api_key or api_token must be provided")
+            
+        self.api_token = token
         self.base_url = base_url
-        self.headers = {"Authorization": f"Bearer {api_token}"}
+        self.headers = {"Authorization": f"Bearer {token}"}
+        
+        # Initialize nested managers
+        self.inboxes = InboxesManager(self)
+        self.threads = ThreadsManager(self)
         
     def _make_request(self, method: str, endpoint: str, data: Optional[Dict] = None, headers_override: Optional[Dict] = None) -> Dict[str, Any]:
         """Make HTTP request to AgentMail API."""
@@ -194,20 +462,39 @@ class AgentMailClient:
     
     def get_thread_messages(self, thread_id: str) -> List[Message]:
         """
-        Get all messages in a thread.
-        
-        Note: This method is disabled due to AgentMail API limitations.
-        The /threads/{id}/messages endpoint returns 404 errors.
+        Get all messages in a thread using the threads endpoint.
         
         Args:
             thread_id: The thread ID
             
         Returns:
-            Empty list (functionality disabled)
+            List of Message objects
         """
-        # Return empty list to avoid 404 errors
-        # The chatbot works fine without message history
-        return []
+        try:
+            # Use the threads.get() method which should include messages
+            thread_data = self.threads.get(thread_id)
+            
+            messages = []
+            # Extract messages from the thread response
+            messages_data = thread_data.get("messages", [])
+            
+            for message_data in messages_data:
+                messages.append(Message(
+                    id=message_data["id"],
+                    thread_id=message_data.get("thread_id", thread_id),
+                    sender=message_data["sender"],
+                    recipient=message_data["recipient"],
+                    subject=message_data.get("subject", ""),
+                    body=message_data.get("body", ""),
+                    created_at=datetime.fromisoformat(message_data["created_at"]),
+                    message_type=message_data.get("type", "email")
+                ))
+            
+            return messages
+            
+        except Exception as e:
+            logger.error(f"Failed to get thread messages for {thread_id}: {e}")
+            return []
     
     def _convert_text_to_html(self, text: str) -> str:
         """
@@ -354,3 +641,6 @@ class AgentMailClient:
             return True
         except requests.exceptions.HTTPError:
             return False
+
+# Backward compatibility alias
+AgentMailClient = AgentMail

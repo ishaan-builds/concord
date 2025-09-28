@@ -31,7 +31,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'dev-secret-key-change-in-production')
 
 # Initialize ChromaDB client (same path as webhook server)
-chroma_client = chromadb.PersistentClient(path='./db/')
+chroma_client = chromadb.HttpClient(host='localhost', port=8001)
 
 # Store created trips in memory (in production, use a database)
 TRIPS_STORE = {}
