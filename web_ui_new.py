@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
 Web UI for creating and managing AgentMail trip coordination inboxes.
+Refactored to use ChatbotEngine methods instead of duplicating logic.
 """
 import os
 import sys
 import json
 import uuid
 import logging
-import re
 import chromadb
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -18,7 +18,7 @@ project_root = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, project_root)
 
 from src.config import get_settings
-from src.agentmail_client import AgentMailClient  # This now imports the refactored client
+from src.agentmail_client import AgentMailClient
 from src.chatbot_engine import ChatbotEngine
 from src.itinerary_models import TripItinerary, Location, GroupMember
 
@@ -36,11 +36,28 @@ chroma_client = chromadb.HttpClient(host='localhost', port=8001)
 TRIPS_STORE = {}
 TRIPS_FILE = os.path.join(project_root, 'data', 'trips.json')
 
+# Global chatbot engine instance (will be initialized once)
+_chatbot_engine = None
+
+def get_chatbot_engine():
+    """Get or create the global chatbot engine instance."""
+    global _chatbot_engine
+    if _chatbot_engine is None:
+        settings = get_settings()
+        _chatbot_engine = ChatbotEngine(
+            ai_provider=settings.ai.provider,
+            openai_api_key=settings.ai.openai_api_key,
+            google_api_key=settings.ai.google_api_key,
+            model=settings.ai.google_model if settings.ai.provider == 'google' else settings.ai.openai_model
+        )
+    return _chatbot_engine
+
 def _convert_text_to_html(text: str) -> str:
     """
     Convert plain text to HTML with proper formatting.
     This replaces the private method from the old client.
     """
+    import re
     html = text.replace('\\n', '\n').replace('\r\n', '\n')
     paragraphs = html.split('\n\n')
     formatted_paragraphs = []
@@ -204,7 +221,7 @@ def trip_detail(trip_id):
 
 @app.route('/trip/<trip_id>/chatbot', methods=['POST'])
 def chatbot(trip_id):
-    """Chat with the AI assistant for a specific trip."""
+    """Chat with the AI assistant for a specific trip - refactored to use ChatbotEngine methods."""
     trip = TRIPS_STORE.get(trip_id)
     if not trip:
         return jsonify({'error': 'Trip not found'}), 404
@@ -214,56 +231,57 @@ def chatbot(trip_id):
         return jsonify({'error': 'Query is required'}), 400
     
     try:
-        # Load itinerary
+        # Load itinerary from file
         with open(trip['itinerary_file'], 'r') as f:
             itinerary = TripItinerary.from_json(f.read())
         
-        # Initialize chatbot engine
-        settings = get_settings()
-        chatbot_engine = ChatbotEngine(
-            ai_provider=settings.ai.provider,
-            openai_api_key=settings.ai.openai_api_key,
-            google_api_key=settings.ai.google_api_key,
-            model=settings.ai.google_model if settings.ai.provider == 'google' else settings.ai.openai_model
-        )
+        # Get the chatbot engine and set the itinerary
+        chatbot_engine = get_chatbot_engine()
         chatbot_engine.set_itinerary(itinerary)
         
+        # Get ChromaDB collection for this trip
         collection = chroma_client.get_or_create_collection(trip_id)
         
-        response = chatbot_engine.generate_response(
+        # Generate response using ChatbotEngine (this handles all the AI logic)
+        analysis = chatbot_engine.generate_response(
             query=query,
             itinerary_id=trip_id,
             collection=collection,
-            message_history=[],
+            message_history=[],  # Empty for web UI - could be enhanced later
             sender_email="webui_chatbot"
         )
         
-        ai_response = response.query_response
-        
-        # Store facts in ChromaDB if not a pure question
-        if not response.is_pure_question:
-            message_id = f"webui_{int(datetime.now().timestamp() * 1000)}"
-            collection.add(
-                ids=[message_id],
-                documents=[response.facts_summary],
-                metadatas=[{
-                    'sender': 'webui_chatbot',
+        # Store facts in ChromaDB if the ChatbotEngine determined we should
+        if chatbot_engine.should_store_in_rag(analysis):
+            storage_content = chatbot_engine.get_storage_content(analysis)
+            if storage_content:
+                message_id = f"webui_{int(datetime.now().timestamp() * 1000)}"
+                
+                # Get metadata from ChatbotEngine
+                metadata = chatbot_engine.get_rag_metadata(analysis, sender_email="webui_chatbot")
+                metadata.update({
                     'subject': 'Web UI Chat',
-                    'timestamp': datetime.now().isoformat()
-                }]
-            )
-            logger.info(f"Stored factual information from message {message_id} in database")
+                    'sender': 'webui_chatbot'
+                })
+                
+                collection.add(
+                    ids=[message_id],
+                    documents=[storage_content],
+                    metadatas=[metadata]
+                )
+                logger.info(f"Stored factual information from message {message_id} in database")
         
-        # Use the local helper function to format the response
-        html_formatted_response = _convert_text_to_html(ai_response)
+        # Convert response to HTML using the existing helper function
+        html_formatted_response = _convert_text_to_html(analysis.query_response)
         
         return jsonify({
             'response': html_formatted_response,
-            'query': query
+            'query': query,
+            'stored_facts': not analysis.is_pure_question  # Debug info
         })
         
     except Exception as e:
-        logger.error(f"Error testing chatbot: {e}", exc_info=True)
+        logger.error(f"Error in chatbot endpoint: {e}", exc_info=True)
         return jsonify({'error': f'Error: {str(e)}'}), 500
 
 @app.route('/trip/<trip_id>/conversations', methods=['GET'])

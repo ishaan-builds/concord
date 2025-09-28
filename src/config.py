@@ -15,8 +15,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class AgentMailConfig:
     """AgentMail API configuration."""
-    api_token: str
-    base_url: str = "https://api.agentmail.to/v0"
+    api_key: str
     inbox_name: str = "GroupTripBot"
     inbox_display_name: str = "Group Trip Coordinator Bot"
 
@@ -63,13 +62,12 @@ class Settings:
     
     def _load_agentmail_config(self) -> AgentMailConfig:
         """Load AgentMail configuration from environment."""
-        api_token = os.getenv("AGENTMAIL_API_TOKEN")
-        if not api_token:
-            raise ValueError("AGENTMAIL_API_TOKEN environment variable is required")
+        api_key = os.getenv("AGENTMAIL_API_KEY")
+        if not api_key:
+            raise ValueError("AGENTMAIL_API_KEY environment variable is required")
         
         return AgentMailConfig(
-            api_token=api_token,
-            base_url=os.getenv("AGENTMAIL_BASE_URL", "https://api.agentmail.to/v0"),
+            api_key=api_key,
             inbox_name=os.getenv("INBOX_NAME", "GroupTripBot"),
             inbox_display_name=os.getenv("INBOX_DISPLAY_NAME", "Group Trip Coordinator Bot")
         )
@@ -159,7 +157,7 @@ class Settings:
         
         # Set specific logger levels
         if self.app.debug:
-            logging.getLogger("agentmail_client").setLevel(logging.DEBUG)
+            logging.getLogger("agentmail").setLevel(logging.DEBUG)
             logging.getLogger("chatbot_engine").setLevel(logging.DEBUG)
             logging.getLogger("webhook_server").setLevel(logging.DEBUG)
     
@@ -171,8 +169,7 @@ class Settings:
             Template string for .env file
         """
         return """# AgentMail Configuration
-AGENTMAIL_API_TOKEN=your_agentmail_api_token_here
-AGENTMAIL_BASE_URL=https://api.agentmail.to/v0
+AGENTMAIL_API_KEY=your_agentmail_api_key_here
 INBOX_NAME=GroupTripBot
 INBOX_DISPLAY_NAME=Group Trip Coordinator Bot
 
@@ -222,7 +219,7 @@ def check_required_env_vars() -> tuple[bool, list[str]]:
         Tuple of (all_present, missing_vars)
     """
     base_required_vars = [
-        "AGENTMAIL_API_TOKEN",
+        "AGENTMAIL_API_KEY",
         "WEBHOOK_URL"
     ]
     
@@ -273,8 +270,8 @@ def require_agentmail_config(func):
     def wrapper(*args, **kwargs):
         try:
             settings = get_settings()
-            if not settings.agentmail.api_token:
-                raise ValueError("AgentMail API token not configured")
+            if not settings.agentmail.api_key:
+                raise ValueError("AgentMail API key not configured")
             return func(*args, **kwargs)
         except Exception as e:
             logger.error(f"AgentMail configuration error: {e}")
