@@ -1,69 +1,109 @@
-# AgentMail AI Chatbot for Group Coordination
+# Concord - AI-Powered Trip Coordination Platform
 
-A personalized AI-powered chatbot using AgentMail's infrastructure for group information sharing, specifically designed for managing trip itineraries and group coordination.
+An intelligent trip planning and coordination platform that combines AgentMail's infrastructure with advanced AI capabilities for seamless group travel management.
 
-## Features
+## 🚀 Features
 
-- **Centralized Information Storage**: Store group itinerary and trip details in AgentMail inbox as the authoritative source
-- **Multi-Channel Access**: Enable group members to query via email or other messaging channels
-- **Context-Aware Responses**: AI chatbot uses persistent message history and threads for intelligent answers
-- **Automated Coordination**: No manual email management - fully automated responses
-- **Persistent History**: All interactions saved and searchable via AgentMail's API
-- **Real-time Updates**: Webhook-based system for instant responses to new messages
+- **AI-Powered Itinerary Management**: Uses Google Gemini 2.0 to intelligently schedule and organize trip events
+- **Interactive Web Interface**: Modern React-like UI with real-time calendar integration using FullCalendar
+- **Email-Based Coordination**: Group members can interact via email through dedicated AgentMail inboxes
+- **Smart Event Creation**: AI automatically determines optimal scheduling, locations, and event details
+- **Vector Database Storage**: ChromaDB integration for persistent trip context and intelligent RAG queries  
+- **Multi-Domain Support**: Custom domain setup with Cloudflare tunnels for professional deployment
+- **Real-time Chat Interface**: Built-in AI assistant for instant trip planning and coordination
 
-## Architecture
+## 🏗️ Architecture
 
-The system consists of:
+### Core Components
+1. **Web UI** (`web_ui.py`) - Flask-based web interface with calendar visualization
+2. **AI Engine** (`src/chatbot_engine.py`) - Gemini-powered intelligent trip planning
+3. **AgentMail Integration** (`src/agentmail_client.py`) - Email coordination and inbox management
+4. **Vector Database** (`db/`) - ChromaDB for context storage and retrieval
+5. **Webhook Server** (`src/webhook_server.py`) - Real-time email processing
 
-1. **AgentMail Inbox**: Central storage for itinerary data and message history
-2. **AI Engine**: OpenAI GPT-powered responses with contextual awareness
-3. **Webhook Handler**: Automated message processing and response generation
-4. **API Client**: AgentMail integration for inbox, thread, and webhook management
+### AI-Powered Scheduling
+- **Intelligent Event Placement**: AI decides optimal timing based on trip context
+- **Dynamic Rescheduling**: Automatically adjusts itineraries when conflicts arise
+- **Smart Location Matching**: Resolves addresses and coordinates for mapping
+- **Cost Optimization**: Considers budget constraints in planning decisions
 
-## Setup
+## 🛠️ Setup
 
-1. Install dependencies:
+### 1. Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Configure environment variables:
+### 2. Configure Environment
 ```bash
 cp config/.env.example config/.env
-# Edit config/.env with your API keys
+# Edit config/.env with your API keys:
+# - AGENTMAIL_API_KEY (get from AgentMail dashboard)
+# - GOOGLE_API_KEY (for Gemini AI)
+# - OPENAI_API_KEY (optional, for OpenAI fallback)
 ```
 
-3. Run the webhook server:
+### 3. Start the Application
 ```bash
-python src/webhook_server.py
+# Start the web UI
+python web_ui.py
+
+# Or start the webhook server for email integration
+python main.py
 ```
 
-4. Set up your AgentMail inbox and webhook:
+### 4. Create Your First Trip
+1. Visit `http://localhost:5002`
+2. Click "Create New Trip"
+3. Configure your trip details
+4. Share the generated email address with your group
+
+## 📱 Usage
+
+### Web Interface
+- **Trip Creation**: Set up new trips with destinations and group details
+- **AI Chat**: Ask the AI assistant to plan activities, book restaurants, or adjust schedules
+- **Calendar View**: Visual timeline of all trip events with interactive details
+- **Group Coordination**: Share trip email for seamless group communication
+
+### Email Integration
+Group members can email the trip address to:
+- Ask questions about the itinerary
+- Request changes to plans
+- Get recommendations for activities
+- Receive automated confirmations and updates
+
+### AI Commands
+The AI understands natural language requests like:
+- "Add a flight from NYC to Paris on December 15th at 6 PM"
+- "Find a good restaurant near the hotel for dinner tomorrow"
+- "Move the museum visit to earlier in the day"
+- "What's the total cost of our trip so far?"
+
+## 🌐 Custom Domain Setup
+
+For professional deployment with custom domains:
+
 ```bash
-python examples/setup_demo.py
+# Configure Cloudflare tunnel
+./start-cloudflare.sh
+
+# Your app will be available at your custom domain
+# Webhook endpoint: https://webhook.your-domain.com/webhook
 ```
 
-## Usage
+## 🔧 Configuration
 
-The chatbot automatically responds to messages sent to your AgentMail inbox. Group members can:
+Key settings in `config/.env`:
+- **AI_PROVIDER**: Choose between 'google' (Gemini) or 'openai' (GPT)
+- **AI_MODEL**: Specific model version (gemini-2.0-flash-exp recommended)
+- **WEBHOOK_URL**: Public URL for email webhook processing
+- **DEBUG**: Enable detailed logging for development
 
-- Ask about trip itinerary details
-- Get location information
-- Query schedules and timing
-- Request contact information
-- Update trip details (if authorized)
+## 🎯 Perfect for Hackathons
 
-## API Integration
-
-Uses AgentMail's API endpoints:
-- `/v0/inboxes` - Inbox management
-- `/v0/threads` - Message history access
-- `/v0/webhooks` - Event-driven automation
-
-## Configuration
-
-See `config/settings.py` for customization options including:
-- AI model selection
-- Response templates
-- Authorization rules
-- Webhook endpoints
+- **Quick Setup**: Get running in under 5 minutes
+- **Modern Tech Stack**: AI, Vector DB, Real-time UI
+- **Scalable Architecture**: Ready for production deployment
+- **Demo-Friendly**: Interactive calendar and chat interface
+- **Practical Use Case**: Solves real coordination problems

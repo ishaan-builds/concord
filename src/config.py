@@ -151,7 +151,7 @@ class Settings:
             format=log_format,
             handlers=[
                 logging.StreamHandler(),
-                logging.FileHandler("./logs/agentmail_chatbot.log")
+                logging.FileHandler("./logs/log.txt")
             ]
         )
         
