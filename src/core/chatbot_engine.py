@@ -12,7 +12,7 @@ import re
 import json
 
 from .itinerary_models import TripItinerary, ItineraryManager
-from .agentmail_client import Message
+from ..clients.agentmail_client import Message
 
 logger = logging.getLogger(__name__)
 

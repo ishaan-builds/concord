@@ -5,9 +5,9 @@ import re
 from typing import Dict, Any
 from quotequail import quote
 
-from .agentmail_client import AgentMailClient
-from .message_processor import process_message_and_get_reply
-from .markdown_converter import format_ai_response_for_email
+from ..clients.agentmail_client import AgentMailClient
+from ..utils.message_processor import process_message_and_get_reply
+from ..utils.markdown_converter import format_ai_response_for_email
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

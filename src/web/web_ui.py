@@ -18,12 +18,12 @@ import chromadb
 project_root = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, project_root)
 
-from src.config import get_settings
+from src.config.settings import get_settings
 # --- THIS IS THE FIX: Removed the failing import of IsTakenError ---
-from src.agentmail_client import AgentMailClient
-from src.itinerary_models import TripItinerary, Location, GroupMember
-from src.message_processor import process_message_and_get_reply
-from src.markdown_converter import format_ai_response
+from src.clients.agentmail_client import AgentMailClient
+from src.core.itinerary_models import TripItinerary, GroupMember
+from src.utils.message_processor import process_message_and_get_reply
+from src.utils.markdown_converter import format_ai_response
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -236,7 +236,7 @@ def trip_detail(trip_id):
     itinerary = None
     if 'itinerary_file' in trip:
         try:
-            from src.itinerary_models import TripItinerary
+            from src.core.itinerary_models import TripItinerary
             import os
             if os.path.exists(trip['itinerary_file']):
                 with open(trip['itinerary_file'], 'r') as f:
@@ -335,7 +335,7 @@ def refresh_calendar(trip_id):
         
         # If itinerary file exists, reload and validate the data
         if 'itinerary_file' in trip:
-            from src.itinerary_models import TripItinerary
+            from src.core.itinerary_models import TripItinerary
             import os
             
             if os.path.exists(trip['itinerary_file']):

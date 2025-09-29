@@ -1,0 +1,8 @@
+1. Host on domain - decide domain
+2. Individual session - sql - 
+3. Reworking the database - RAG Database
+4. Request system better
+5. Making the UI deletable
+6. Google cal style
+7. Improving UI
+8. 

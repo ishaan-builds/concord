@@ -4,9 +4,9 @@ import os
 from datetime import datetime
 import chromadb
 
-from .config import get_settings
-from .chatbot_engine import ChatbotEngine
-from .itinerary_models import TripItinerary
+from ..config.settings import get_settings
+from ..core.chatbot_engine import ChatbotEngine
+from ..core.itinerary_models import TripItinerary
 from agentmail import Thread
 from quotequail import quote
 
