@@ -122,7 +122,7 @@ class Settings:
             if self.ai.openai_model not in valid_models:
                 logger.warning(f"OpenAI model {self.ai.openai_model} may not be valid. Valid models: {valid_models}")
         elif self.ai.provider == "google":
-            valid_models = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.5-flash-lite", "gemini-pro", "gemini-pro-vision"]
+            valid_models = ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.5-flash-lite", "gemini-pro", "gemini-pro-vision", "gemini-2.0-flash-exp"]
             if self.ai.google_model not in valid_models:
                 logger.warning(f"Google model {self.ai.google_model} may not be valid. Valid models: {valid_models}")
         

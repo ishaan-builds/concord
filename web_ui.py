@@ -36,7 +36,7 @@ app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'dev-secret-key-change-in-pr
 CORS(app, origins=['https://samplewebsite.xyz', 'http://samplewebsite.xyz'])
 
 # Initialize clients and storage
-chroma_client = chromadb.HttpClient(host='localhost', port=8001)
+chroma_client = chromadb.PersistentClient(path=os.path.join(project_root, 'db'))
 TRIPS_STORE = {}
 TRIPS_FILE = os.path.join(project_root, 'data', 'trips.json')
 

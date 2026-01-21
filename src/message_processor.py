@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 
 # Initialize clients once when the module is imported for better performance
 settings = get_settings()
-chroma_client = chromadb.HttpClient(host='localhost', port=8001)
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+chroma_client = chromadb.PersistentClient(path=os.path.join(project_root, 'db'))
 chatbot_engine = ChatbotEngine(
     ai_provider=settings.ai.provider,
     openai_api_key=settings.ai.openai_api_key,
